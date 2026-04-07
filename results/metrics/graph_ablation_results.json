@@ -1,0 +1,17 @@
+{
+  "ablation_fixed_adj": {
+    "accuracy": 0.6911422685892751,
+    "macro_f1": 0.6783465095020177,
+    "balanced_acc": 0.6716893935580069
+  },
+  "ablation_learnable_adj": {
+    "accuracy": 0.6939996013024121,
+    "macro_f1": 0.6889921757284085,
+    "balanced_acc": 0.6805119653613801
+  },
+  "ablation_flatten_lstm": {
+    "accuracy": 0.8452779638312123,
+    "macro_f1": 0.7935024654161524,
+    "balanced_acc": 0.788622203642234
+  }
+}

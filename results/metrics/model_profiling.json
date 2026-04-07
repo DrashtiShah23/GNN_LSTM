@@ -1,0 +1,14 @@
+{
+  "LSTM-only": {
+    "params": 1387340,
+    "latency_ms": 0.186
+  },
+  "GNN-only": {
+    "params": 11724,
+    "latency_ms": 0.254
+  },
+  "GNN+LSTM": {
+    "params": 247244,
+    "latency_ms": 0.486
+  }
+}

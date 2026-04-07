@@ -1,0 +1,14 @@
+{
+  "gnn": {
+    "accuracy": 0.5894996887216027,
+    "macro_f1": 0.5864393837569848,
+    "balanced_acc": 0.5877130497303314,
+    "note": "full HHAR 454K windows, val_loss early stopping"
+  },
+  "cnn1d": {
+    "accuracy": 0.6626534118532174,
+    "macro_f1": 0.658549819480882,
+    "balanced_acc": 0.6602388294914938,
+    "note": "full 454K, val_loss early stopping"
+  }
+}

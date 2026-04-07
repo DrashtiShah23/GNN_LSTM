@@ -1,0 +1,17 @@
+{
+  "standard_gnn": {
+    "accuracy": 0.720579440494385,
+    "macro_f1": 0.7151143620184452,
+    "balanced_acc": 0.7079795290308009,
+    "params": 11724,
+    "latency_ms": 0.254
+  },
+  "tiny_gnn": {
+    "accuracy": 0.6716725363811549,
+    "macro_f1": 0.6610821491551159,
+    "balanced_acc": 0.6549607713413729,
+    "params": 3820,
+    "latency_f32_ms": 0.292,
+    "latency_f16_ms": 0.163
+  }
+}

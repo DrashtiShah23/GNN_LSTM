@@ -1,0 +1,13 @@
+{
+  "pamap2": {
+    "accuracy": 0.7859658449066383,
+    "macro_f1": 0.7937544136778308,
+    "balanced_acc": 0.789485920375876
+  },
+  "hhar": {
+    "accuracy": 0.6626534118532174,
+    "macro_f1": 0.658549819480882,
+    "balanced_acc": 0.6602388294914938,
+    "note": "full HHAR 454K windows, val_loss early stopping"
+  }
+}
