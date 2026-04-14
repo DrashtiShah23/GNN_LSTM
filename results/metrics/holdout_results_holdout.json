@@ -1,0 +1,17 @@
+{
+  "pamap2": {
+    "cnn1d": {
+      "dataset": "pamap2",
+      "model": "cnn1d",
+      "split": "80/20",
+      "n_train": 9631,
+      "n_val": 2408,
+      "n_test": 3010,
+      "accuracy": 0.9933554817275747,
+      "macro_f1": 0.9938482317365901,
+      "balanced_acc": 0.9940664681222615,
+      "params": 302188,
+      "train_time_s": 141.4
+    }
+  }
+}
