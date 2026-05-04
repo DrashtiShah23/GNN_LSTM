@@ -36,14 +36,14 @@ PAMAP2_SENSOR_COLS = 40  # columns per subject file (after timestamp)
 EDGE_METHOD = "fixed"   # "fixed" | "learnable" | "attention"
 # For PAMAP2: wrist-chest, chest-ankle, wrist-ankle
 PAMAP2_EDGES = [(0, 1), (1, 2), (0, 2)]
-# For HHAR: phone-watch
-HHAR_EDGES = [(0, 1)]
+# For HHAR: x-y, y-z, x-z (3 axes fully connected)
+HHAR_EDGES = [(0, 1), (1, 2), (0, 2)]
 
 # ── Node feature dims (6 stats × n_channels_per_node) ────────────────────────
 # PAMAP2: 18 channels / 3 nodes = 6 ch/node × 6 stats = 36 features/node
 PAMAP2_NODE_FEAT_DIM = 36
-# HHAR: 3 channels (accel x,y,z) × 6 stats = 18 features/node
-HHAR_NODE_FEAT_DIM = 18
+# HHAR: 1 channel per axis-node × 6 stats = 6 features/node  (3 nodes: x, y, z)
+HHAR_NODE_FEAT_DIM = 6
 
 # ── Model hyperparameters ─────────────────────────────────────────────────────
 GCN_HIDDEN_DIM = 64

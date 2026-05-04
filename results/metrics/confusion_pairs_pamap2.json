@@ -1,0 +1,65 @@
+{
+  "gnn_pamap2": {
+    "model": "gnn_pamap2",
+    "sitting_as_lying": 0.1922554347826087,
+    "lying_as_sitting": 0.18606271777003483,
+    "walking_as_nordic": 0.03162055335968379,
+    "nordic_as_walking": 0.00663716814159292,
+    "label_order": [
+      "transient",
+      "lying",
+      "sitting",
+      "standing",
+      "walking",
+      "running",
+      "cycling",
+      "nordic_walking",
+      "watching_TV",
+      "computer_work",
+      "car_driving",
+      "ascending_stairs"
+    ]
+  },
+  "cnn1d_pamap2": {
+    "model": "cnn1d_pamap2",
+    "sitting_as_lying": 0.13858695652173914,
+    "lying_as_sitting": 0.1024390243902439,
+    "walking_as_nordic": 0.019762845849802372,
+    "nordic_as_walking": 0.0011061946902654867,
+    "label_order": [
+      "transient",
+      "lying",
+      "sitting",
+      "standing",
+      "walking",
+      "running",
+      "cycling",
+      "nordic_walking",
+      "watching_TV",
+      "computer_work",
+      "car_driving",
+      "ascending_stairs"
+    ]
+  },
+  "gnnlstm_pamap2": {
+    "model": "gnnlstm_pamap2",
+    "sitting_as_lying": 0.1232876712328767,
+    "lying_as_sitting": 0.24305555555555555,
+    "walking_as_nordic": 0.02666666666666667,
+    "nordic_as_walking": 0.0,
+    "label_order": [
+      "transient",
+      "lying",
+      "sitting",
+      "standing",
+      "walking",
+      "running",
+      "cycling",
+      "nordic_walking",
+      "watching_TV",
+      "computer_work",
+      "car_driving",
+      "ascending_stairs"
+    ]
+  }
+}

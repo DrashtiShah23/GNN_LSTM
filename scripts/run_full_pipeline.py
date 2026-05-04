@@ -14,10 +14,14 @@ Then generates all final plots:
 
 Usage:
     python scripts/run_full_pipeline.py
+    python scripts/run_full_pipeline.py --models gnn_lstm --gnn-lstm-tuned
+    # Re-run only GNN+LSTM with tuned hyperparameters; merges into pamap2_deep_models.json
+    # / hhar_deep_models.json so LSTM/GNN rows and plots stay intact.
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 import json
 import time
@@ -70,9 +74,16 @@ def train_one_fold(
     use_adj: bool,
     device: torch.device,
     verbose: bool = True,
+    *,
+    lr: float | None = None,
+    weight_decay: float | None = None,
+    patience: int | None = None,
 ) -> nn.Module:
     """Train with early stopping; return best-weight model."""
-    opt = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    lr_ = LEARNING_RATE if lr is None else lr
+    wd_ = WEIGHT_DECAY if weight_decay is None else weight_decay
+    pat_max = PATIENCE if patience is None else patience
+    opt = torch.optim.Adam(model.parameters(), lr=lr_, weight_decay=wd_)
     sched = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, patience=5, factor=0.5)
     crit = nn.CrossEntropyLoss()
     best_acc, best_state, patience_cnt = 0.0, None, 0
@@ -124,7 +135,7 @@ def train_one_fold(
             best_acc, best_state, patience_cnt = val_acc, copy.deepcopy(model.state_dict()), 0
         else:
             patience_cnt += 1
-            if patience_cnt >= PATIENCE:
+            if patience_cnt >= pat_max:
                 if verbose:
                     print(f"  Early stop @ epoch {epoch}. Best val acc: {best_acc:.4f}", flush=True)
                 break
@@ -147,6 +158,11 @@ def loso_deep(
     n_nodes: int,
     adj_builder,
     tag: str,
+    *,
+    gnn_lstm_kwargs: dict | None = None,
+    gnn_lstm_lr: float | None = None,
+    gnn_lstm_weight_decay: float | None = None,
+    gnn_lstm_patience: int | None = None,
 ) -> dict:
     """
     Full LOSO evaluation for one deep model on one dataset.
@@ -155,6 +171,7 @@ def loso_deep(
     device = get_device()
     set_seed(SEED)
     all_true, all_pred = [], []
+    fold_rows: list[dict] = []
     unique_subjs = np.unique(subjects)
     n_folds = len(unique_subjs)
     adj_fixed = adj_builder().to(device)
@@ -211,14 +228,24 @@ def loso_deep(
                 n_classes     = n_classes,
             ).to(device)
         else:
+            gl_kw = dict(gnn_lstm_kwargs or {})
             model = GNNLSTMModel(
-                node_feat_dim = node_feat_dim,
-                n_nodes       = n_nodes,
-                n_classes     = n_classes,
+                node_feat_dim=node_feat_dim,
+                n_nodes=n_nodes,
+                n_classes=n_classes,
+                **gl_kw,
             ).to(device)
 
         # ── train ─────────────────────────────────────────────────────────────
-        model = train_one_fold(model, tr_loader, val_loader, use_adj, device, verbose=True)
+        if model_type == "gnn_lstm":
+            model = train_one_fold(
+                model, tr_loader, val_loader, use_adj, device, verbose=True,
+                lr=gnn_lstm_lr,
+                weight_decay=gnn_lstm_weight_decay,
+                patience=gnn_lstm_patience,
+            )
+        else:
+            model = train_one_fold(model, tr_loader, val_loader, use_adj, device, verbose=True)
 
         # Save fold model
         fold_path = Path(MODELS_DIR) / f"{tag}_fold{fold_i}.pt"
@@ -241,20 +268,53 @@ def loso_deep(
                 fold_true.extend(yb.cpu().numpy().tolist())
 
         fold_acc = accuracy_score(fold_true, fold_pred)
+        fold_f1 = f1_score(fold_true, fold_pred, average="macro", zero_division=0)
         print(f"  Fold test acc: {fold_acc:.4f}", flush=True)
         all_true.extend(fold_true)
         all_pred.extend(fold_pred)
+        fold_rows.append(
+            {
+                "fold": fold_i,
+                "test_subject": int(test_subj) if np.issubdtype(type(test_subj), np.integer) else str(test_subj),
+                "accuracy": float(fold_acc),
+                "macro_f1": float(fold_f1),
+            }
+        )
 
     acc   = accuracy_score(all_true, all_pred)
     f1    = f1_score(all_true, all_pred, average="macro", zero_division=0)
     bal   = balanced_accuracy_score(all_true, all_pred)
-    print(f"\n[{tag}] LOSO Acc={acc:.4f}  F1={f1:.4f}  BalAcc={bal:.4f}", flush=True)
+    fold_accs = [r["accuracy"] for r in fold_rows]
+    fold_f1s = [r["macro_f1"] for r in fold_rows]
+    acc_std = float(np.std(fold_accs)) if fold_accs else 0.0
+    f1_std = float(np.std(fold_f1s)) if fold_f1s else 0.0
+    print(f"\n[{tag}] LOSO Acc={acc:.4f} ± {acc_std:.4f}  F1={f1:.4f} ± {f1_std:.4f}  BalAcc={bal:.4f}", flush=True)
 
     # Save predictions
     np.save(Path(METRICS_DIR) / f"{tag}_y_true.npy", np.array(all_true))
     np.save(Path(METRICS_DIR) / f"{tag}_y_pred.npy", np.array(all_pred))
 
-    return {"accuracy": acc, "macro_f1": f1, "balanced_acc": bal}
+    out = {
+        "accuracy": acc,
+        "macro_f1": f1,
+        "balanced_acc": bal,
+        "accuracy_std": acc_std,
+        "macro_f1_std": f1_std,
+        "folds": fold_rows,
+    }
+    if model_type == "gnn_lstm" and gnn_lstm_kwargs is not None:
+        out["gnn_lstm_hparams"] = dict(gnn_lstm_kwargs)
+    if model_type == "gnn_lstm" and (
+        gnn_lstm_lr is not None
+        or gnn_lstm_weight_decay is not None
+        or gnn_lstm_patience is not None
+    ):
+        out["gnn_lstm_train_hparams"] = {
+            "lr": gnn_lstm_lr,
+            "weight_decay": gnn_lstm_weight_decay,
+            "patience": gnn_lstm_patience,
+        }
+    return out
 
 
 # =============================================================================
@@ -276,7 +336,45 @@ def load_dataset(name: str):
 # Main
 # =============================================================================
 
-def run_dataset(name: str, max_windows_per_subject: int | None = None):
+# Optional GNN+LSTM preset (slightly wider GCN/LSTM/MLP, milder dropout, gentler Adam).
+TUNED_GNN_LSTM_MODEL_KWARGS: dict = {
+    "gcn_hidden": 96,
+    "gcn_output": 96,
+    "num_gcn_layers": 2,
+    "lstm_hidden": 192,
+    "lstm_layers": 2,
+    "dropout": 0.2,
+    "mlp_hidden": 96,
+}
+TUNED_GNN_LSTM_LR = 5e-4
+TUNED_GNN_LSTM_WEIGHT_DECAY = 5e-5
+TUNED_GNN_LSTM_PATIENCE = 22
+
+# Heavier preset for difficult LOSO folds (more capacity; still dropout).
+TUNED_STRONG_GNN_LSTM_MODEL_KWARGS: dict = {
+    "gcn_hidden": 128,
+    "gcn_output": 128,
+    "num_gcn_layers": 2,
+    "lstm_hidden": 256,
+    "lstm_layers": 2,
+    "dropout": 0.25,
+    "mlp_hidden": 128,
+}
+TUNED_STRONG_GNN_LSTM_LR = 8e-4
+TUNED_STRONG_GNN_LSTM_WEIGHT_DECAY = 4e-5
+TUNED_STRONG_GNN_LSTM_PATIENCE = 25
+
+
+def run_dataset(
+    name: str,
+    max_windows_per_subject: int | None = None,
+    model_types: list[str] | None = None,
+    *,
+    gnn_lstm_model_kwargs: dict | None = None,
+    gnn_lstm_lr: float | None = None,
+    gnn_lstm_weight_decay: float | None = None,
+    gnn_lstm_patience: int | None = None,
+) -> dict:
     print(f"\n{'='*70}")
     print(f"  Dataset: {name.upper()}")
     print(f"{'='*70}\n")
@@ -308,13 +406,18 @@ def run_dataset(name: str, max_windows_per_subject: int | None = None):
         n_nodes       = 2
         adj_builder   = build_hhar_adj
 
-    results = {}
+    mtypes = model_types or ["lstm", "gnn", "gnn_lstm"]
+    results: dict = {}
 
-    for model_type in ["lstm", "gnn", "gnn_lstm"]:
-        tag = f"{model_type.replace('_','')}_{name}"  # e.g. lstm_pamap2
+    for model_type in mtypes:
+        tag = f"{model_type.replace('_','')}_{name}"  # e.g. gnnlstm_pamap2
         print(f"\n{'─'*60}")
         print(f"  Model: {model_type.upper()}  —  {name.upper()} LOSO")
         print(f"{'─'*60}")
+        use_gl_kw = gnn_lstm_model_kwargs if model_type == "gnn_lstm" else None
+        use_gl_lr = gnn_lstm_lr if model_type == "gnn_lstm" else None
+        use_gl_wd = gnn_lstm_weight_decay if model_type == "gnn_lstm" else None
+        use_gl_pt = gnn_lstm_patience if model_type == "gnn_lstm" else None
         res = loso_deep(
             X=X, y=y, subjects=subjects,
             model_type=model_type,
@@ -324,31 +427,131 @@ def run_dataset(name: str, max_windows_per_subject: int | None = None):
             n_nodes=n_nodes,
             adj_builder=adj_builder,
             tag=tag,
+            gnn_lstm_kwargs=use_gl_kw,
+            gnn_lstm_lr=use_gl_lr,
+            gnn_lstm_weight_decay=use_gl_wd,
+            gnn_lstm_patience=use_gl_pt,
         )
         results[model_type] = res
 
-    # Save deep results
+    # Merge into existing JSON so partial runs (e.g. only GNN+LSTM) keep other models.
     out_path = Path(METRICS_DIR) / f"{name}_deep_models.json"
+    merged: dict = {}
+    if out_path.exists():
+        with open(out_path) as f:
+            merged = json.load(f)
+    merged.update(results)
     with open(out_path, "w") as f:
-        json.dump(results, f, indent=2)
-    print(f"\nSaved deep model results → {out_path}")
-    return results
+        json.dump(merged, f, indent=2)
+    print(f"\nSaved deep model results → {out_path}  (merged keys: {list(results.keys())})")
+    return merged
 
 
 def main():
+    parser = argparse.ArgumentParser(description="HAR full LOSO pipeline + plots")
+    parser.add_argument(
+        "--models",
+        nargs="+",
+        choices=["lstm", "gnn", "gnn_lstm"],
+        default=None,
+        help="Which deep models to run (default: all three). Example: --models gnn_lstm",
+    )
+    parser.add_argument(
+        "--gnn-lstm-tuned",
+        action="store_true",
+        help="Use a slightly wider GNN+LSTM + milder dropout + lower LR/WD and longer "
+        "patience (only affects GNN+LSTM folds). Combine with --models gnn_lstm.",
+    )
+    parser.add_argument(
+        "--gnn-lstm-tuned-strong",
+        action="store_true",
+        help="Larger GNN+LSTM (128-d GCN, 256-d LSTM) + lr=8e-4. Mutually exclusive with "
+        "--gnn-lstm-tuned in practice: if both set, strong wins.",
+    )
+    parser.add_argument(
+        "--skip-plots",
+        action="store_true",
+        help="Skip generate_all_plots (metrics and npy still written).",
+    )
+    parser.add_argument(
+        "--dataset",
+        nargs="+",
+        choices=["pamap2", "hhar"],
+        default=["pamap2", "hhar"],
+        help="Which dataset(s) to run LOSO on (default: both).",
+    )
+    args = parser.parse_args()
+
     set_seed(SEED)
+    run_p2 = "pamap2" in args.dataset
+    run_hh = "hhar" in args.dataset
+
+    model_types = args.models or ["lstm", "gnn", "gnn_lstm"]
+    gl_model_kw: dict | None = None
+    gl_lr = gl_wd = None
+    gl_pat: int | None = None
+    if args.gnn_lstm_tuned_strong:
+        if "gnn_lstm" not in model_types:
+            parser.error("--gnn-lstm-tuned-strong requires --models to include gnn_lstm")
+        gl_model_kw = dict(TUNED_STRONG_GNN_LSTM_MODEL_KWARGS)
+        gl_lr = TUNED_STRONG_GNN_LSTM_LR
+        gl_wd = TUNED_STRONG_GNN_LSTM_WEIGHT_DECAY
+        gl_pat = TUNED_STRONG_GNN_LSTM_PATIENCE
+        print(
+            "\n[GNN+LSTM tuned-strong] model kwargs:", gl_model_kw,
+            "| lr=", gl_lr, "wd=", gl_wd, "patience=", gl_pat,
+            flush=True,
+        )
+    elif args.gnn_lstm_tuned:
+        if "gnn_lstm" not in model_types:
+            parser.error("--gnn-lstm-tuned requires --models to include gnn_lstm")
+        gl_model_kw = dict(TUNED_GNN_LSTM_MODEL_KWARGS)
+        gl_lr = TUNED_GNN_LSTM_LR
+        gl_wd = TUNED_GNN_LSTM_WEIGHT_DECAY
+        gl_pat = TUNED_GNN_LSTM_PATIENCE
+        print(
+            "\n[GNN+LSTM tuned] model kwargs:", gl_model_kw,
+            "| lr=", gl_lr, "wd=", gl_wd, "patience=", gl_pat,
+            flush=True,
+        )
+
+    pamap2_path = Path(METRICS_DIR) / "pamap2_deep_models.json"
+    hhar_path = Path(METRICS_DIR) / "hhar_deep_models.json"
 
     # ── PAMAP2 ────────────────────────────────────────────────────────────────
-    pamap2_deep = run_dataset("pamap2")
+    if run_p2:
+        pamap2_deep = run_dataset(
+            "pamap2",
+            model_types=model_types,
+            gnn_lstm_model_kwargs=gl_model_kw,
+            gnn_lstm_lr=gl_lr,
+            gnn_lstm_weight_decay=gl_wd,
+            gnn_lstm_patience=gl_pat,
+        )
+    else:
+        pamap2_deep = json.load(open(pamap2_path)) if pamap2_path.exists() else {}
+        print("\n[PAMAP2] Skipped (--dataset); using existing metrics for plots if present.")
 
     # ── HHAR ─────────────────────────────────────────────────────────────────
     hhar_X_path = Path(PROCESSED_DIR) / "hhar_X.npy"
-    hhar_deep = {}
-    if hhar_X_path.exists():
-        # Cap to 5000 windows/subject so training remains tractable (~45k total)
-        hhar_deep = run_dataset("hhar", max_windows_per_subject=5000)
-    else:
+    hhar_deep: dict = {}
+    if run_hh and hhar_X_path.exists():
+        # Cap to 5000 windows/subject so training remains tractable (~45k total).
+        # CNN1D in cnn1d_results.json is trained on full HHAR unless you re-run CNN with the same cap.
+        hhar_deep = run_dataset(
+            "hhar",
+            max_windows_per_subject=5000,
+            model_types=model_types,
+            gnn_lstm_model_kwargs=gl_model_kw,
+            gnn_lstm_lr=gl_lr,
+            gnn_lstm_weight_decay=gl_wd,
+            gnn_lstm_patience=gl_pat,
+        )
+    elif run_hh:
         print("\n[HHAR] Processed data not found — skipping.")
+    else:
+        hhar_deep = json.load(open(hhar_path)) if hhar_path.exists() else {}
+        print("\n[HHAR] Skipped (--dataset); using existing metrics for plots if present.")
 
     # ── Load baselines ────────────────────────────────────────────────────────
     pamap2_bl_path = Path(METRICS_DIR) / "pamap2_baselines.json"
@@ -364,11 +567,14 @@ def main():
             hhar_baselines = json.load(f)
 
     # ── Generate all final plots ──────────────────────────────────────────────
-    print("\n\nGenerating final plots …")
-    try:
-        generate_all_plots(pamap2_deep, pamap2_baselines, hhar_deep, hhar_baselines)
-    except Exception as e:
-        print(f"[WARN] Plot generation failed: {e}")
+    if args.skip_plots:
+        print("\n[skip-plots] Skipping generate_all_plots.")
+    else:
+        print("\n\nGenerating final plots …")
+        try:
+            generate_all_plots(pamap2_deep, pamap2_baselines, hhar_deep, hhar_baselines)
+        except Exception as e:
+            print(f"[WARN] Plot generation failed: {e}")
 
     print("\n✅  Full pipeline complete.")
 

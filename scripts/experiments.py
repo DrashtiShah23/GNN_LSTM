@@ -12,6 +12,13 @@ Experiments:
   8. Mobile optimisation      — smaller hidden dims + float16 inference
 
 Run: python scripts/experiments.py [--exp all] [--exp cnn] [--exp crossdev] ...
+
+Augmentation demo (faster HHAR): cap windows per subject without affecting other
+experiments or full augmentation output:
+  python scripts/experiments.py --exp augment --hhar-max-per-subject-for-augment 5000
+Or set env HAR_AUGMENT_MAX_WINDOWS_PER_SUBJECT=5000 (CLI overrides env when given).
+Demo runs write augmentation_results_demo.json and augmentation_comparison_demo.png
+and use loso tags aug_demo_*_hhar so full-run metrics are not overwritten.
 """
 
 from __future__ import annotations
@@ -41,6 +48,7 @@ from src.config import (
 from src.models import (
     GNNOnlyModel, GNNLSTMModel, LSTMOnlyModel,
     CNN1DModel, GNNLearnableAdjModel, GNNFlattenLSTMModel,
+    GNNAttentionAdjModel,
 )
 from src.dataset import (
     HARWindowDataset, HARWindowDataset2D,
@@ -82,6 +90,26 @@ def load_dataset(name: str):
     subj  = np.load(p / f"{name}_subjects.npy")
     y, mp = remap(y_raw)
     return X, y, subj, mp
+
+
+def subsample_windows_per_subject(
+    X: np.ndarray,
+    y: np.ndarray,
+    subjects: np.ndarray,
+    max_per_subject: int,
+    seed: int = SEED,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Cap windows per subject (same scheme as run_full_pipeline)."""
+    rng = np.random.default_rng(seed)
+    keep = []
+    for s in np.unique(subjects):
+        idx = np.where(subjects == s)[0]
+        if len(idx) > max_per_subject:
+            idx = rng.choice(idx, max_per_subject, replace=False)
+            idx = np.sort(idx)
+        keep.append(idx)
+    keep = np.concatenate(keep)
+    return X[keep], y[keep], subjects[keep]
 
 
 def loso_one(
@@ -198,6 +226,36 @@ def bar_chart(names, values, title, ylabel, out_path, color="steelblue"):
     ax.set_xticklabels(names, rotation=30, ha="right")
     plt.tight_layout(); fig.savefig(out_path, dpi=150); plt.close(fig)
     print(f"  Saved {out_path}")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# EXP 0 — Attention-gated adjacency (PAMAP2 GNN-only)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def exp_attention_adj():
+    print("\n" + "=" * 70)
+    print("EXP 0 — Attention-gated adjacency GNN (PAMAP2 LOSO)")
+    print("=" * 70)
+    X, y, subj, _ = load_dataset("pamap2")
+    n_cls = len(np.unique(y))
+    init_adj = build_pamap2_adj()
+    graph_ds = HARGraphDataset(X, y, dataset="pamap2")
+
+    def factory():
+        return GNNAttentionAdjModel(
+            PAMAP2_NODE_FEAT_DIM, 3, n_cls, init_adj=init_adj.clone(),
+        )
+
+    tag = "attention_adj_gnn_pamap2"
+    res = loso_one(factory, graph_ds, subj, use_adj=True, tag=tag, save_model=False)
+    with open(METS / "attention_adj_gnn_pamap2.json", "w") as f:
+        json.dump(res, f, indent=2)
+    yt = np.load(METS / f"{tag}_y_true.npy")
+    yp = np.load(METS / f"{tag}_y_pred.npy")
+    classes = sorted(np.unique(yt).tolist())
+    labels = [PAMAP2_ACTIVITIES.get(k, str(k)) for k in classes]
+    save_cm_plot(yt, yp, labels, "Attention-adj GNN — PAMAP2", PLOTS / f"cm_{tag}.png")
+    return res
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -444,14 +502,25 @@ def exp_graph_ablation():
 # EXP 4 — Data Augmentation (HHAR, GNN-only)
 # ═════════════════════════════════════════════════════════════════════════════
 
-def exp_augmentation():
+def exp_augmentation(hhar_max_per_subject: int | None = None):
     print("\n" + "=" * 70)
     print("EXP 4 — Data Augmentation (HHAR, GNN-only)")
     print("=" * 70)
 
     X_orig, y_orig, subj_orig, _ = load_dataset("hhar")
+    demo = hhar_max_per_subject is not None
+    if demo:
+        n_before = len(X_orig)
+        X_orig, y_orig, subj_orig = subsample_windows_per_subject(
+            X_orig, y_orig, subj_orig, hhar_max_per_subject
+        )
+        print(
+            f"  [DEMO] HHAR capped at {hhar_max_per_subject} windows/subject: "
+            f"{n_before} → {len(X_orig)} windows (SEED={SEED})"
+        )
+
     n_cls = len(np.unique(y_orig))
-    adj   = build_hhar_adj()
+    _ = build_hhar_adj()
 
     methods = {
         "no_aug":   (X_orig, y_orig, subj_orig),
@@ -463,6 +532,10 @@ def exp_augmentation():
                         np.tile(subj_orig, 2),),
     }
 
+    tag_prefix = "aug_demo_" if demo else "aug_"
+    json_name = "augmentation_results_demo.json" if demo else "augmentation_results.json"
+    plot_name = "augmentation_comparison_demo.png" if demo else "augmentation_comparison.png"
+
     results = {}
     for aug_name, (X_a, y_a, subj_a) in methods.items():
         print(f"\n── Augmentation: {aug_name}  X={X_a.shape} ──")
@@ -471,12 +544,19 @@ def exp_augmentation():
         def factory():
             return GNNOnlyModel(HHAR_NODE_FEAT_DIM, 2, n_cls)
 
-        tag = f"aug_{aug_name}_hhar"
+        tag = f"{tag_prefix}{aug_name}_hhar"
         res = loso_one(factory, dataset, subj_a, use_adj=True, tag=tag, save_model=False)
         results[aug_name] = res
 
-    with open(METS / "augmentation_results.json", "w") as f:
-        json.dump(results, f, indent=2)
+    payload = dict(results)
+    if demo:
+        payload["_demo_meta"] = {
+            "hhar_max_per_subject": hhar_max_per_subject,
+            "n_windows_after_cap": int(len(X_orig)),
+        }
+
+    with open(METS / json_name, "w") as f:
+        json.dump(payload, f, indent=2)
 
     # Comparison plot
     aug_labels = list(results.keys())
@@ -490,10 +570,13 @@ def exp_augmentation():
         ax.bar_label(bars, fmt="%.3f", padding=3, fontsize=9)
         ax.set_ylim(0, 1.1); ax.set_ylabel(metric)
         ax.set_title(f"Augmentation Effect — {metric} (HHAR, GNN-only)")
-    fig.suptitle("Data Augmentation Experiment — HHAR", fontweight="bold")
+    title = "Data Augmentation Experiment — HHAR"
+    if demo:
+        title += f" (demo: ≤{hhar_max_per_subject} win/subj)"
+    fig.suptitle(title, fontweight="bold")
     plt.tight_layout()
-    fig.savefig(PLOTS / "augmentation_comparison.png", dpi=150); plt.close(fig)
-    print("Saved augmentation_comparison.png")
+    fig.savefig(PLOTS / plot_name, dpi=150); plt.close(fig)
+    print(f"Saved {plot_name}")
     return results
 
 
@@ -864,7 +947,10 @@ def update_master_comparison():
     hhbl  = json.load(open(METS / "HHAR_baselines.json"))        if (METS / "HHAR_baselines.json").exists()       else {}
     cnn   = json.load(open(METS / "cnn1d_results.json"))         if (METS / "cnn1d_results.json").exists()        else {}
     abl   = json.load(open(METS / "graph_ablation_results.json")) if (METS / "graph_ablation_results.json").exists() else {}
-    aug   = json.load(open(METS / "augmentation_results.json"))  if (METS / "augmentation_results.json").exists() else {}
+    _aug_full = METS / "augmentation_results.json"
+    _aug_demo = METS / "augmentation_results_demo.json"
+    _aug_path = _aug_full if _aug_full.exists() else _aug_demo
+    aug   = json.load(open(_aug_path)) if _aug_path.exists() else {}
 
     def g(d, key, sub="accuracy"):
         return d.get(key, {}).get(sub, d.get(key, {}).get("mean_accuracy", 0)) if d else 0
@@ -931,14 +1017,47 @@ def update_master_comparison():
 # Entry point
 # ═════════════════════════════════════════════════════════════════════════════
 
-ALL_EXPS = ["cnn", "crossdev", "ablation", "augment", "interp", "error", "xgbfi", "mobile"]
+ALL_EXPS = [
+    "attention",
+    "cnn",
+    "crossdev",
+    "ablation",
+    "augment",
+    "interp",
+    "error",
+    "xgbfi",
+    "mobile",
+    "transfer",
+]
 
 def main():
+    import os
+
     parser = argparse.ArgumentParser(description="HAR Extension Experiments")
-    parser.add_argument("--exp", nargs="+", default=["all"],
-                        choices=ALL_EXPS + ["all"],
-                        help="Which experiments to run")
+    parser.add_argument(
+        "--exp",
+        nargs="+",
+        default=["all"],
+        choices=ALL_EXPS + ["all"],
+        help="Experiments: attention (adj-gate GNN), cnn, crossdev, ablation, augment, "
+        "interp, error, xgbfi, mobile, transfer (cross-dataset train/test), or all",
+    )
+    parser.add_argument(
+        "--hhar-max-per-subject-for-augment",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Optional HHAR cap for --exp augment only: max windows per subject before "
+        "augmentation (demo / fast run). Writes augmentation_results_demo.json. "
+        "Env HAR_AUGMENT_MAX_WINDOWS_PER_SUBJECT used if this flag is omitted.",
+    )
     args = parser.parse_args()
+
+    augment_cap = args.hhar_max_per_subject_for_augment
+    if augment_cap is None:
+        ev = os.environ.get("HAR_AUGMENT_MAX_WINDOWS_PER_SUBJECT", "").strip()
+        if ev:
+            augment_cap = int(ev)
 
     run = set(args.exp)
     if "all" in run:
@@ -946,10 +1065,20 @@ def main():
 
     t_total = time.time()
 
+    if "attention" in run:
+        exp_attention_adj()
+    if "transfer" in run:
+        import importlib.util
+        p = ROOT / "scripts" / "cross_dataset_transfer.py"
+        spec = importlib.util.spec_from_file_location("cross_dataset_transfer", p)
+        mod = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(mod)
+        mod.main()
     if "cnn"      in run: exp_cnn1d()
     if "crossdev" in run: exp_cross_device()
     if "ablation" in run: exp_graph_ablation()
-    if "augment"  in run: exp_augmentation()
+    if "augment"  in run: exp_augmentation(hhar_max_per_subject=augment_cap)
     if "interp"   in run: exp_neural_interpretability()
     if "error"    in run: exp_error_analysis()
     if "xgbfi"    in run: exp_xgb_feature_importance()

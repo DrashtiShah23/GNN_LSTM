@@ -1,14 +1,17 @@
-{
-  "LSTM-only": {
-    "params": 1387340,
-    "latency_ms": 0.186
+[
+  {
+    "Model": "LSTM-only",
+    "Params": 1387340,
+    "Latency_ms": 0.1993447876884602
   },
-  "GNN-only": {
-    "params": 11724,
-    "latency_ms": 0.254
+  {
+    "Model": "GNN-only",
+    "Params": 11724,
+    "Latency_ms": 0.30706510005984455
   },
-  "GNN+LSTM": {
-    "params": 247244,
-    "latency_ms": 0.486
+  {
+    "Model": "GNN+LSTM",
+    "Params": 247244,
+    "Latency_ms": 0.5750239623012021
   }
-}
+]

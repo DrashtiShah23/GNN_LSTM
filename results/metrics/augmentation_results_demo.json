@@ -1,0 +1,26 @@
+{
+  "no_aug": {
+    "accuracy": 0.5742222222222222,
+    "macro_f1": 0.5644977793627847,
+    "balanced_acc": 0.5691955138442876
+  },
+  "gaussian": {
+    "accuracy": 0.5977777777777777,
+    "macro_f1": 0.5931044166186827,
+    "balanced_acc": 0.5923431202362176
+  },
+  "scale": {
+    "accuracy": 0.6053333333333333,
+    "macro_f1": 0.5995361926394505,
+    "balanced_acc": 0.5994940180727073
+  },
+  "timewarp": {
+    "accuracy": 0.6086666666666667,
+    "macro_f1": 0.6037764933400822,
+    "balanced_acc": 0.6030908006857872
+  },
+  "_demo_meta": {
+    "hhar_max_per_subject": 250,
+    "n_windows_after_cap": 2250
+  }
+}

@@ -49,9 +49,9 @@ def build_pamap2_adj() -> Tensor:
 
 
 def build_hhar_adj() -> Tensor:
-    """Fixed adjacency for HHAR (phone=0, watch=1)."""
+    """Fixed adjacency for HHAR (x-axis=0, y-axis=1, z-axis=2 — fully connected)."""
     from src.config import HHAR_EDGES
-    return build_fixed_adj(HHAR_EDGES, n_nodes=2)
+    return build_fixed_adj(HHAR_EDGES, n_nodes=3)
 
 
 # ── Learnable adjacency (used in ablation) ────────────────────────────────────
@@ -122,10 +122,16 @@ def window_to_node_features_pamap2(window: np.ndarray) -> np.ndarray:
 
 def window_to_node_features_hhar(window: np.ndarray) -> np.ndarray:
     """
-    Map a (WINDOW_SIZE, 3) window (x,y,z) to node features (2, feat_dim).
-    For HHAR both nodes see the same stream; the graph edge still allows
-    the GCN to learn a cross-node transformation.
+    Map a (WINDOW_SIZE, 3) window (x, y, z accelerometer) to per-axis node
+    features of shape (3, 6).
+
+    Each spatial axis becomes one node (x=0, y=1, z=2) with 6 statistical
+    features: [mean, std, min, max, rms, iqr].  The resulting 3-node graph
+    captures cross-axis dependencies (e.g. gravity coupling x/y during walking,
+    vertical vs horizontal motion during stairs) that a flat feature vector
+    cannot represent explicitly.
     """
-    feat = _node_stats(window)  # (6*3,) = (18,)
-    node_feat = feat[np.newaxis, :]       # (1, 18)
-    return np.repeat(node_feat, 2, axis=0).astype(np.float32)  # (2, 18)
+    return np.stack([
+        _node_stats(window[:, i: i + 1])  # (6,) for 1-channel segment
+        for i in range(window.shape[1])
+    ]).astype(np.float32)  # (3, 6)

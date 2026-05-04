@@ -15,11 +15,18 @@ data/processed/*.npy
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# Results — model weights too large
-results/models/*.pt
+# Results — model weights and large prediction arrays
+results/models/
+results/metrics/*.npy
+results/run_full_pipeline.log
+results/run_full_pipeline.pid
 
-# Keep plots and metrics in git (small files)
-# results/plots/ and results/metrics/ are tracked
+# Matplotlib cache
+.matplotlib/
+
+# Keep plots and JSON metrics in git
+# results/plots/*.png  — tracked
+# results/metrics/*.json — tracked
 
 # IDE
 .vscode/settings.json

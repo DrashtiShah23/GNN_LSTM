@@ -1,334 +1,277 @@
 """
-Generate all final result plots and SHAP interpretability analysis.
-Run after all LOSO experiments have completed.
+Generate final report plots and statistics:
+  2. Per-class F1 plots — updated to include ImprovedGNNLSTM + AttnAdj
+  3. Paired t-tests — ImprovedGNNLSTM vs old GNN+LSTM, AttnAdj vs fixed
+  4. ROC / AUC curves — multi-class one-vs-rest for key models
+
+Outputs:
+  results/plots/per_class_f1_pamap2.png          (updated)
+  results/plots/per_class_f1_hhar.png            (updated)
+  results/plots/roc_auc_pamap2.png
+  results/plots/roc_auc_hhar.png
+  results/metrics/significance_extended.json
 """
-import numpy as np, json, matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import seaborn as sns
+
+from __future__ import annotations
+
+import json
+import sys
 from pathlib import Path
-from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import confusion_matrix
 
-from src.config import (
-    METRICS_DIR, PLOTS_DIR, PAMAP2_ACTIVITIES,
-    BATCH_SIZE, SEED, WINDOW_SIZE,
-)
-from src.evaluation import compute_metrics, plot_confusion_matrix
+import matplotlib; matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+from scipy import stats
+from sklearn.metrics import f1_score, roc_curve, auc
+from sklearn.preprocessing import label_binarize
 
-Path(PLOTS_DIR).mkdir(parents=True, exist_ok=True)
-Path(METRICS_DIR).mkdir(parents=True, exist_ok=True)
-sns.set_theme(style="whitegrid", font_scale=1.1)
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
-# ── Load data & label encoder ─────────────────────────────────────────────────
-X_p    = np.load("data/processed/pamap2_X.npy")
-y_raw_p = np.load("data/processed/pamap2_y.npy")
-subj_p  = np.load("data/processed/pamap2_subjects.npy")
-le_p = LabelEncoder(); y_p = le_p.fit_transform(y_raw_p)
-act_names_p = [PAMAP2_ACTIVITIES[k] for k in sorted(le_p.classes_)]
+METRICS = ROOT / "results/metrics"
+PLOTS   = ROOT / "results/plots"
+PLOTS.mkdir(parents=True, exist_ok=True)
 
-X_h    = np.load("data/processed/hhar_X.npy")
-y_raw_h = np.load("data/processed/hhar_y.npy")
-subj_h  = np.load("data/processed/hhar_subjects.npy")
-le_h = LabelEncoder(); y_h = le_h.fit_transform(y_raw_h)
-act_names_h = list(le_h.classes_)
+PAMAP2_LABELS = ["lying","sitting","standing","walking","running",
+                 "cycling","nordic_walk","watch_tv","computer",
+                 "ascending","descending","vacuum"]
+HHAR_LABELS   = ["biking","sitting","standing","stairsdown","stairsup","walking"]
 
-print(f"PAMAP2 activities: {act_names_p}")
-print(f"HHAR activities:   {act_names_h}")
 
-# ════════════════════════════════════════════════════════════════════════════
-# 1. SHAP for RF and XGBoost on PAMAP2
-# ════════════════════════════════════════════════════════════════════════════
-print("\n" + "=" * 60)
-print("SHAP Feature Importance — PAMAP2 Baselines")
-print("=" * 60)
-try:
-    import shap
-    from src.baselines import extract_features, run_baselines_loso
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.preprocessing import StandardScaler
-    from sklearn.pipeline import Pipeline
+# ── helpers ───────────────────────────────────────────────────────────────────
 
-    X_feat = extract_features(X_p)
-    # Use all data to fit RF for SHAP (representative)
-    rf = RandomForestClassifier(n_estimators=200, random_state=SEED, n_jobs=-1)
-    rf.fit(X_feat, y_p)
-    n_ch = X_p.shape[2]
-    feat_stats = ["mean", "std", "min", "max", "rms", "fft_energy"]
-    feat_names = [f"{stat}_ch{ch}" for stat in feat_stats for ch in range(n_ch)]
+def load(tag):
+    yt = np.load(METRICS / f"{tag}_y_true.npy")
+    yp = np.load(METRICS / f"{tag}_y_pred.npy")
+    return yt, yp
 
-    explainer_rf = shap.TreeExplainer(rf)
-    # Use 500 random samples for speed
-    rng = np.random.default_rng(SEED)
-    idx = rng.choice(len(X_feat), size=min(500, len(X_feat)), replace=False)
-    shap_values = explainer_rf.shap_values(X_feat[idx])
 
-    # Mean absolute SHAP across classes
-    if isinstance(shap_values, list):
-        mean_shap = np.mean([np.abs(sv).mean(axis=0) for sv in shap_values], axis=0)
+def n_classes_from(yt, yp):
+    return int(max(yt.max(), yp.max())) + 1
+
+
+# ── 2. Per-class F1 plots ─────────────────────────────────────────────────────
+
+def per_class_f1_data(ds):
+    if ds == "pamap2":
+        tags = [
+            ("GNN+LSTM (old)",          "gnnlstm_pamap2"),
+            ("GNN-only",                "gnn_pamap2"),
+            ("CNN1D",                   "cnn1d_pamap2"),
+            ("ImprovedGNNLSTM",         "improved_gnnlstm_pamap2"),
+            ("ImprovedGNNLSTM+AttnAdj", "attn_adj_pamap2"),
+        ]
+        labels = PAMAP2_LABELS
     else:
-        mean_shap = np.abs(shap_values).mean(axis=0)
+        tags = [
+            ("GNN+LSTM (old)",          "gnnlstm_hhar"),
+            ("GNN-only",                "gnn_hhar"),
+            ("CNN1D",                   "cnn1d_hhar"),
+            ("ImprovedGNNLSTM",         "improved_gnnlstm_hhar"),
+            ("ImprovedGNNLSTM+AttnAdj", "attn_adj_hhar"),
+        ]
+        labels = HHAR_LABELS
 
-    top_k = 20
-    top_idx = np.argsort(mean_shap)[::-1][:top_k]
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.barh([feat_names[i] for i in top_idx[::-1]], mean_shap[top_idx[::-1]], color="steelblue")
-    ax.set_xlabel("Mean |SHAP value|")
-    ax.set_title(f"Top-{top_k} Features — Random Forest (PAMAP2)")
+    results = {}
+    for label, tag in tags:
+        p = METRICS / f"{tag}_y_true.npy"
+        if not p.exists():
+            continue
+        yt, yp = load(tag)
+        nc = n_classes_from(yt, yp)
+        f1 = f1_score(yt, yp, average=None, zero_division=0, labels=list(range(nc)))
+        results[label] = f1
+    return results, labels
+
+
+def plot_per_class_f1(ds):
+    data, labels = per_class_f1_data(ds)
+    if not data:
+        print(f"  No data for {ds}"); return
+
+    nc = max(len(v) for v in data.values())
+    labels = labels[:nc]
+
+    x = np.arange(nc)
+    n_models = len(data)
+    width = 0.75 / n_models
+    offsets = np.linspace(-(n_models-1)/2, (n_models-1)/2, n_models) * width
+
+    palette = sns.color_palette("tab10", n_models)
+    fig, ax = plt.subplots(figsize=(max(10, nc * 1.3), 5))
+
+    for i, (model, f1s) in enumerate(data.items()):
+        f1s_padded = np.zeros(nc)
+        f1s_padded[:len(f1s)] = f1s
+        ax.bar(x + offsets[i], f1s_padded, width, label=model,
+               color=palette[i], alpha=0.85, edgecolor="white", linewidth=0.5)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=9)
+    ax.set_ylabel("F1 Score (per class)", fontsize=10)
+    ax.set_ylim(0, 1.08)
+    ax.axhline(0.8, color="grey", lw=0.8, ls="--", alpha=0.6)
+    ax.set_title(f"Per-Class F1 — {ds.upper()} (LOSO, all models)", fontsize=12, fontweight="bold")
+    ax.legend(loc="upper right", fontsize=8, ncol=2)
+    ax.grid(axis="y", alpha=0.3)
     plt.tight_layout()
-    fig.savefig(f"{PLOTS_DIR}/shap_rf_pamap2.png", dpi=150)
-    print(f"  Saved SHAP RF plot → {PLOTS_DIR}/shap_rf_pamap2.png")
+    out = PLOTS / f"per_class_f1_{ds}.png"
+    fig.savefig(out, dpi=150, bbox_inches="tight")
     plt.close(fig)
-except Exception as e:
-    print(f"  SHAP skipped: {e}")
+    print(f"  Saved → {out}")
 
-# ════════════════════════════════════════════════════════════════════════════
-# 2. Comprehensive Model Comparison — PAMAP2
-# ════════════════════════════════════════════════════════════════════════════
-print("\n" + "=" * 60)
-print("Model Comparison Charts — PAMAP2")
-print("=" * 60)
 
-# Load baseline results
-with open(f"{METRICS_DIR}/pamap2_baselines.json") as f:
-    baselines_p = json.load(f)
+# ── 3. Paired t-tests ─────────────────────────────────────────────────────────
 
-# Load deep model results
-deep_p = {}
-deep_path = Path(f"{METRICS_DIR}/pamap2_deep_models.json")
-if deep_path.exists():
-    with open(deep_path) as f:
-        deep_p = json.load(f)
-else:
-    # Fall back to per-fold npy files if available
-    for name in ["lstm_only_pamap2", "gnn_only_pamap2", "gnn_lstm_pamap2"]:
-        tp = Path(f"{METRICS_DIR}/{name}_y_true.npy")
-        pp = Path(f"{METRICS_DIR}/{name}_y_pred.npy")
-        if tp.exists() and pp.exists():
-            yt = np.load(tp); yp = np.load(pp)
-            m = compute_metrics(yt, yp)
-            deep_p[name] = {"mean_accuracy": m["accuracy"], "std_accuracy": 0.0, "macro_f1": m["macro_f1"]}
+def paired_ttest(a, b, label_a, label_b):
+    a, b = np.array(a), np.array(b)
+    t, p = stats.ttest_rel(a, b)
+    return {
+        "comparison": f"{label_a} vs {label_b}",
+        "n_folds": len(a),
+        f"mean_{label_a.replace(' ', '_').replace('+', '')}": float(a.mean()),
+        f"mean_{label_b.replace(' ', '_').replace('+', '')}": float(b.mean()),
+        "delta_mean": float(a.mean() - b.mean()),
+        "t_statistic": float(t),
+        "p_value": float(p),
+        "significant_p05": bool(p < 0.05),
+    }
 
-# Combined data
-model_names, means, stds, f1s = [], [], [], []
-order = [("SVM", baselines_p), ("RandomForest", baselines_p), ("XGBoost", baselines_p),
-         ("lstm_only_pamap2", deep_p), ("gnn_only_pamap2", deep_p), ("gnn_lstm_pamap2", deep_p)]
-display_names = ["SVM", "Random Forest", "XGBoost", "LSTM-only", "GNN-only", "GNN+LSTM"]
-colors = ["#4C72B0", "#4C72B0", "#4C72B0", "#DD8452", "#DD8452", "#55A868"]
 
-for (key, d), dname in zip(order, display_names):
-    if key in d:
-        v = d[key]
-        model_names.append(dname)
-        means.append(v.get("mean_accuracy", v.get("accuracy", 0)))
-        stds.append(v.get("std_accuracy", 0))
-        f1s.append(v.get("mean_macro_f1", v.get("macro_f1", 0)))
+def run_significance():
+    imp  = json.loads((METRICS / "improved_gnnlstm_results.json").read_text())
+    p2d  = json.loads((METRICS / "pamap2_deep_models.json").read_text())
+    attn = json.loads((METRICS / "attn_adj_results.json").read_text())
+    old_sig = json.loads((METRICS / "loso_significance.json").read_text())
 
-fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    results = {}
 
-# Accuracy
-bars = axes[0].barh(model_names, means, xerr=stds, color=colors, capsize=5, edgecolor="white")
-axes[0].set_xlim(0, 1.05)
-axes[0].set_xlabel("LOSO Accuracy", fontsize=12)
-axes[0].set_title("Model Accuracy — PAMAP2 LOSO", fontsize=13)
-for bar, val in zip(bars, means):
-    axes[0].text(val + 0.01, bar.get_y() + bar.get_height() / 2,
-                 f"{val:.3f}", va="center", fontsize=10)
+    # PAMAP2: ImprovedGNNLSTM vs old GNN+LSTM
+    imp_p2 = imp["pamap2"]["per_fold"]["accuracy"]
+    old_p2 = [f["accuracy"] for f in p2d["gnn_lstm"]["folds"]]
+    results["pamap2_ImprovedGNNLSTM_vs_GNNLSTMold"] = paired_ttest(
+        imp_p2, old_p2, "ImprovedGNNLSTM", "GNN+LSTM(old)")
 
-# F1
-bars2 = axes[1].barh(model_names, f1s, color=colors, edgecolor="white")
-axes[1].set_xlim(0, 1.05)
-axes[1].set_xlabel("Macro F1-Score", fontsize=12)
-axes[1].set_title("Model Macro F1 — PAMAP2 LOSO", fontsize=13)
-for bar, val in zip(bars2, f1s):
-    axes[1].text(val + 0.01, bar.get_y() + bar.get_height() / 2,
-                 f"{val:.3f}", va="center", fontsize=10)
+    # PAMAP2: AttnAdj vs ImprovedGNNLSTM
+    attn_p2 = attn["pamap2"]["per_fold"]["accuracy"]
+    results["pamap2_AttnAdj_vs_ImprovedGNNLSTM"] = paired_ttest(
+        attn_p2, imp_p2, "AttnAdj", "ImprovedGNNLSTM")
 
-from matplotlib.patches import Patch
-legend_els = [Patch(facecolor="#4C72B0", label="Classical ML"),
-              Patch(facecolor="#DD8452", label="Deep Learning"),
-              Patch(facecolor="#55A868", label="Proposed (GNN+LSTM)")]
-fig.legend(handles=legend_els, loc="lower center", ncol=3, fontsize=11, frameon=True)
-plt.tight_layout(rect=[0, 0.06, 1, 1])
-fig.savefig(f"{PLOTS_DIR}/model_comparison_pamap2.png", dpi=150)
-print(f"  Saved → {PLOTS_DIR}/model_comparison_pamap2.png")
-plt.close(fig)
+    # HHAR: AttnAdj vs ImprovedGNNLSTM
+    imp_h  = imp["hhar"]["per_fold"]["accuracy"]
+    attn_h = attn["hhar"]["per_fold"]["accuracy"]
+    results["hhar_AttnAdj_vs_ImprovedGNNLSTM"] = paired_ttest(
+        attn_h, imp_h, "AttnAdj", "ImprovedGNNLSTM")
 
-# ── Confusion matrices (PAMAP2 best models) ──────────────────────────────────
-for name, act_names in [
-    ("gnn_lstm_pamap2", act_names_p),
-    ("lstm_only_pamap2", act_names_p),
-    ("gnn_only_pamap2", act_names_p),
-]:
-    tp = Path(f"{METRICS_DIR}/{name}_y_true.npy")
-    pp = Path(f"{METRICS_DIR}/{name}_y_pred.npy")
-    if tp.exists() and pp.exists():
-        yt = np.load(tp); yp = np.load(pp)
-        cm = confusion_matrix(yt, yp)
-        # Normalise row-wise
-        cm_norm = cm.astype(float) / cm.sum(axis=1, keepdims=True).clip(min=1)
-        fig, ax = plt.subplots(figsize=(12, 10))
-        sns.heatmap(cm_norm, annot=True, fmt=".2f", cmap="Blues",
-                    xticklabels=act_names, yticklabels=act_names, ax=ax)
-        ax.set_xlabel("Predicted"); ax.set_ylabel("True")
-        ax.set_title(f"Confusion Matrix — {name} (normalised)")
-        plt.xticks(rotation=45, ha="right"); plt.yticks(rotation=0)
-        plt.tight_layout()
-        fig.savefig(f"{PLOTS_DIR}/cm_{name}.png", dpi=150)
-        print(f"  Saved → {PLOTS_DIR}/cm_{name}.png")
-        plt.close(fig)
+    # Carry over legacy significance results
+    for k, v in old_sig.items():
+        results[f"legacy_{k}"] = v
 
-# ════════════════════════════════════════════════════════════════════════════
-# 3. HHAR comparison chart (if results exist)
-# ════════════════════════════════════════════════════════════════════════════
-hhar_baseline_path = Path(f"{METRICS_DIR}/hhar_baselines.json")
-hhar_deep_path     = Path(f"{METRICS_DIR}/hhar_deep_models.json")
-if hhar_baseline_path.exists() and hhar_deep_path.exists():
-    print("\n" + "=" * 60)
-    print("Model Comparison Charts — HHAR")
-    print("=" * 60)
-    with open(hhar_baseline_path) as f: baselines_h = json.load(f)
-    with open(hhar_deep_path) as f: deep_h = json.load(f)
+    out = METRICS / "significance_extended.json"
+    out.write_text(json.dumps(results, indent=2))
+    print(f"  Saved → {out}")
 
-    model_names_h, means_h, stds_h, f1s_h = [], [], [], []
-    order_h = [("SVM", baselines_h), ("RandomForest", baselines_h), ("XGBoost", baselines_h),
-               ("lstm_only_hhar", deep_h), ("gnn_only_hhar", deep_h), ("gnn_lstm_hhar", deep_h)]
-    display_h = ["SVM", "Random Forest", "XGBoost", "LSTM-only", "GNN-only", "GNN+LSTM"]
-    for (key, d), dname in zip(order_h, display_h):
-        if key in d:
-            v = d[key]
-            model_names_h.append(dname)
-            means_h.append(v.get("mean_accuracy", v.get("accuracy", 0)))
-            stds_h.append(v.get("std_accuracy", 0))
-            f1s_h.append(v.get("mean_macro_f1", v.get("macro_f1", 0)))
+    print(f"\n  {'Comparison':<50} {'Δmean':>8} {'p-value':>10} {'sig?':>6}")
+    print(f"  {'─'*50} {'─'*8} {'─'*10} {'─'*6}")
+    for k, v in results.items():
+        if "legacy" in k:
+            continue
+        delta = v["delta_mean"]
+        p     = v["p_value"]
+        sig   = "YES *" if v["significant_p05"] else "no"
+        print(f"  {v['comparison']:<50} {delta:>+8.4f} {p:>10.4f} {sig:>6}")
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-    axes[0].barh(model_names_h, means_h, xerr=stds_h, color=colors[:len(means_h)], capsize=5)
-    axes[0].set_xlim(0, 1.05); axes[0].set_xlabel("LOSO Accuracy")
-    axes[0].set_title("Model Accuracy — HHAR LOSO")
-    axes[1].barh(model_names_h, f1s_h, color=colors[:len(f1s_h)])
-    axes[1].set_xlim(0, 1.05); axes[1].set_xlabel("Macro F1")
-    axes[1].set_title("Model Macro F1 — HHAR LOSO")
-    plt.tight_layout()
-    fig.savefig(f"{PLOTS_DIR}/model_comparison_hhar.png", dpi=150)
-    print(f"  Saved → {PLOTS_DIR}/model_comparison_hhar.png")
-    plt.close(fig)
 
-    # HHAR confusion matrices
-    for name in ["gnn_lstm_hhar", "lstm_only_hhar", "gnn_only_hhar"]:
-        tp = Path(f"{METRICS_DIR}/{name}_y_true.npy")
-        pp = Path(f"{METRICS_DIR}/{name}_y_pred.npy")
-        if tp.exists() and pp.exists():
-            yt = np.load(tp); yp = np.load(pp)
-            cm = confusion_matrix(yt, yp)
-            cm_norm = cm.astype(float) / cm.sum(axis=1, keepdims=True).clip(min=1)
-            fig, ax = plt.subplots(figsize=(9, 7))
-            sns.heatmap(cm_norm, annot=True, fmt=".2f", cmap="Blues",
-                        xticklabels=act_names_h, yticklabels=act_names_h, ax=ax)
-            ax.set_xlabel("Predicted"); ax.set_ylabel("True")
-            ax.set_title(f"Confusion Matrix — {name} (normalised)")
-            plt.tight_layout()
-            fig.savefig(f"{PLOTS_DIR}/cm_{name}.png", dpi=150)
-            print(f"  Saved → {PLOTS_DIR}/cm_{name}.png")
-            plt.close(fig)
+# ── 4. ROC / AUC curves ────────────────────────────────────────────────────────
 
-# ════════════════════════════════════════════════════════════════════════════
-# 4. Cross-dataset comparison (side by side) if both done
-# ════════════════════════════════════════════════════════════════════════════
-if hhar_baseline_path.exists() and hhar_deep_path.exists() and deep_path.exists():
-    print("\nGenerating cross-dataset comparison...")
-    labels = ["SVM", "Random Forest", "XGBoost", "LSTM-only", "GNN-only", "GNN+LSTM"]
-    pamap2_accs = [
-        baselines_p.get("SVM", {}).get("mean_accuracy", 0),
-        baselines_p.get("RandomForest", {}).get("mean_accuracy", 0),
-        baselines_p.get("XGBoost", {}).get("mean_accuracy", 0),
-        deep_p.get("lstm_only_pamap2", {}).get("mean_accuracy", 0),
-        deep_p.get("gnn_only_pamap2",  {}).get("mean_accuracy", 0),
-        deep_p.get("gnn_lstm_pamap2",  {}).get("mean_accuracy", 0),
-    ]
-    hhar_accs = [
-        baselines_h.get("SVM", {}).get("mean_accuracy", 0),
-        baselines_h.get("RandomForest", {}).get("mean_accuracy", 0),
-        baselines_h.get("XGBoost", {}).get("mean_accuracy", 0),
-        deep_h.get("lstm_only_hhar", {}).get("mean_accuracy", 0),
-        deep_h.get("gnn_only_hhar",  {}).get("mean_accuracy", 0),
-        deep_h.get("gnn_lstm_hhar",  {}).get("mean_accuracy", 0),
-    ]
-    x = np.arange(len(labels))
-    w = 0.35
-    fig, ax = plt.subplots(figsize=(13, 6))
-    ax.bar(x - w/2, pamap2_accs, w, label="PAMAP2", color="#4C72B0")
-    ax.bar(x + w/2, hhar_accs,   w, label="HHAR",   color="#DD8452")
-    ax.set_xticks(x); ax.set_xticklabels(labels, rotation=15, ha="right")
-    ax.set_ylabel("LOSO Accuracy"); ax.set_ylim(0, 1.05)
-    ax.set_title("Cross-Dataset Model Comparison (LOSO Accuracy)")
-    ax.legend(); plt.tight_layout()
-    fig.savefig(f"{PLOTS_DIR}/cross_dataset_comparison.png", dpi=150)
-    print(f"  Saved → {PLOTS_DIR}/cross_dataset_comparison.png")
-    plt.close(fig)
-
-# ════════════════════════════════════════════════════════════════════════════
-# 5. Model parameter count & latency profiling
-# ════════════════════════════════════════════════════════════════════════════
-print("\n" + "=" * 60)
-print("Model Profiling — Parameter Count & Latency")
-print("=" * 60)
-import time, torch
-from src.models import GNNLSTMModel, LSTMOnlyModel, GNNOnlyModel
-from src.train import get_device
-from src.config import PAMAP2_NODE_FEAT_DIM
-
-device = get_device()
-n_cls = len(act_names_p)
-configs = [
-    ("LSTM-only",  LSTMOnlyModel(WINDOW_SIZE * 18, n_cls),         False),
-    ("GNN-only",   GNNOnlyModel(PAMAP2_NODE_FEAT_DIM, 3, n_cls),   True),
-    ("GNN+LSTM",   GNNLSTMModel(PAMAP2_NODE_FEAT_DIM, 3, n_cls),   True),
-]
-profile_rows = []
-n_reps = 100
-for name, model, use_adj in configs:
-    model = model.to(device).eval()
-    n_params = sum(p.numel() for p in model.parameters())
-    # Dummy forward pass for latency
-    if use_adj:
-        if "LSTM" in name and "GNN" in name:
-            dummy_x = torch.randn(1, 10, 3, PAMAP2_NODE_FEAT_DIM).to(device)
-        else:
-            dummy_x = torch.randn(1, 3, PAMAP2_NODE_FEAT_DIM).to(device)
-        dummy_adj = torch.eye(3).to(device)
-        with torch.no_grad():
-            for _ in range(10): model(dummy_x, dummy_adj)  # warm-up
-        t0 = time.perf_counter()
-        with torch.no_grad():
-            for _ in range(n_reps): model(dummy_x, dummy_adj)
+def plot_roc(ds):
+    if ds == "pamap2":
+        model_tags = [
+            ("GNN-only",                "gnn_pamap2"),
+            ("GNN+LSTM (old)",          "gnnlstm_pamap2"),
+            ("CNN1D",                   "cnn1d_pamap2"),
+            ("ImprovedGNNLSTM",         "improved_gnnlstm_pamap2"),
+            ("ImprovedGNNLSTM+AttnAdj", "attn_adj_pamap2"),
+        ]
     else:
-        dummy_x = torch.randn(1, WINDOW_SIZE * 18).to(device)
-        with torch.no_grad():
-            for _ in range(10): model(dummy_x)
-        t0 = time.perf_counter()
-        with torch.no_grad():
-            for _ in range(n_reps): model(dummy_x)
-    latency_ms = (time.perf_counter() - t0) / n_reps * 1000
-    profile_rows.append({"Model": name, "Params": n_params, "Latency_ms": latency_ms})
-    print(f"  {name:12s}: {n_params:>10,} params  |  {latency_ms:.3f} ms/sample")
+        model_tags = [
+            ("GNN-only",                "gnn_hhar"),
+            ("GNN+LSTM (old)",          "gnnlstm_hhar"),
+            ("CNN1D",                   "cnn1d_hhar"),
+            ("ImprovedGNNLSTM",         "improved_gnnlstm_hhar"),
+            ("ImprovedGNNLSTM+AttnAdj", "attn_adj_hhar"),
+        ]
 
-# Save profiling table
-with open(f"{METRICS_DIR}/model_profiling.json", "w") as f:
-    json.dump(profile_rows, f, indent=2)
+    palette = sns.color_palette("tab10", len(model_tags))
+    fig, ax = plt.subplots(figsize=(8, 7))
 
-# Bar chart of param counts
-fig, axes = plt.subplots(1, 2, figsize=(11, 4))
-names_ = [r["Model"] for r in profile_rows]
-params_ = [r["Params"] / 1e6 for r in profile_rows]
-lats_   = [r["Latency_ms"] for r in profile_rows]
-axes[0].bar(names_, params_, color=["#4C72B0", "#DD8452", "#55A868"])
-axes[0].set_ylabel("Parameters (M)"); axes[0].set_title("Model Size")
-axes[1].bar(names_, lats_,   color=["#4C72B0", "#DD8452", "#55A868"])
-axes[1].set_ylabel("Latency (ms/sample)"); axes[1].set_title("Inference Latency")
-plt.tight_layout()
-fig.savefig(f"{PLOTS_DIR}/model_profiling.png", dpi=150)
-print(f"  Saved → {PLOTS_DIR}/model_profiling.png")
-plt.close(fig)
+    roc_aucs = {}
+    for (label, tag), color in zip(model_tags, palette):
+        p = METRICS / f"{tag}_y_true.npy"
+        if not p.exists():
+            continue
+        yt, yp = load(tag)
+        nc = n_classes_from(yt, yp)
+        classes = list(range(nc))
 
-print("\n✅ All final plots & profiling complete!")
+        yt_bin = label_binarize(yt, classes=classes)
+        yp_bin = label_binarize(yp, classes=classes)
+
+        # Per-class AUC, then macro average
+        fpr_list, tpr_list, aucs = [], [], []
+        for c in range(nc):
+            if yt_bin[:, c].sum() == 0:
+                continue
+            fpr, tpr, _ = roc_curve(yt_bin[:, c], yp_bin[:, c])
+            aucs.append(auc(fpr, tpr))
+            fpr_list.append(fpr)
+            tpr_list.append(tpr)
+
+        mean_fpr = np.linspace(0, 1, 300)
+        mean_tpr = np.mean([np.interp(mean_fpr, f, t) for f, t in zip(fpr_list, tpr_list)], axis=0)
+        macro_auc = float(np.mean(aucs))
+        roc_aucs[label] = macro_auc
+
+        ax.plot(mean_fpr, mean_tpr, lw=2.2, color=color,
+                label=f"{label}  (AUC = {macro_auc:.3f})")
+
+    ax.plot([0, 1], [0, 1], "k--", lw=1, alpha=0.5, label="Random  (AUC = 0.500)")
+    ax.set_xlabel("False Positive Rate", fontsize=11)
+    ax.set_ylabel("True Positive Rate", fontsize=11)
+    ax.set_title(f"Macro-Average ROC (one-vs-rest) — {ds.upper()} LOSO",
+                 fontsize=12, fontweight="bold")
+    ax.legend(loc="lower right", fontsize=9)
+    ax.grid(alpha=0.3)
+    plt.tight_layout()
+    out = PLOTS / f"roc_auc_{ds}.png"
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  Saved → {out}")
+
+    for m, a_val in sorted(roc_aucs.items(), key=lambda x: x[1]):
+        print(f"    {m:<35} AUC = {a_val:.4f}")
+
+    return roc_aucs
+
+
+# ── main ──────────────────────────────────────────────────────────────────────
+
+def main():
+    print("\n── 2. Per-class F1 plots ────────────────────────────────────────")
+    for ds in ["pamap2", "hhar"]:
+        plot_per_class_f1(ds)
+
+    print("\n── 3. Paired t-tests ────────────────────────────────────────────")
+    run_significance()
+
+    print("\n── 4. ROC / AUC curves ──────────────────────────────────────────")
+    for ds in ["pamap2", "hhar"]:
+        print(f"  {ds.upper()}")
+        plot_roc(ds)
+
+    print("\nDone.")
+
+
+if __name__ == "__main__":
+    main()

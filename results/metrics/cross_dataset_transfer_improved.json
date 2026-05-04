@@ -1,0 +1,16 @@
+{
+  "results": [
+    {
+      "direction": "HHAR \u2192 PAMAP2",
+      "acc": 0.1496,
+      "f1": 0.1001,
+      "bacc": 0.2257
+    },
+    {
+      "direction": "PAMAP2 \u2192 HHAR",
+      "acc": 0.2136,
+      "f1": 0.0902,
+      "bacc": 0.2106
+    }
+  ]
+}

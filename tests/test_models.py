@@ -70,6 +70,23 @@ class TestModels:
         out = model(x, self.adj)
         assert out.shape == (self.batch, self.n_classes)
 
+    def test_gnn_lstm_custom_depth(self):
+        from src.models import GNNLSTMModel
+        model = GNNLSTMModel(
+            self.node_feat, self.n_nodes, self.n_classes,
+            gcn_hidden=32, gcn_output=16, num_gcn_layers=3, lstm_hidden=32, lstm_layers=1,
+        )
+        x = torch.randn(self.batch, self.seq_len, self.n_nodes, self.node_feat)
+        out = model(x, self.adj)
+        assert out.shape == (self.batch, self.n_classes)
+
+    def test_gnn_attention_adj_forward(self):
+        from src.models import GNNAttentionAdjModel
+        model = GNNAttentionAdjModel(self.node_feat, self.n_nodes, self.n_classes, self.adj)
+        x = torch.randn(self.batch, self.n_nodes, self.node_feat)
+        out = model(x, self.adj)
+        assert out.shape == (self.batch, self.n_classes)
+
     def test_lstm_only_forward(self):
         from src.models import LSTMOnlyModel
         input_dim = WINDOW_SIZE * self.node_feat

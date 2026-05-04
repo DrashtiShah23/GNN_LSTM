@@ -5,6 +5,7 @@ Training loop utilities: train_epoch, evaluate, early stopping, LOSO split.
 from __future__ import annotations
 
 import copy
+import os
 import time
 from pathlib import Path
 from typing import Dict, Tuple
@@ -30,6 +31,10 @@ def set_seed(seed: int = SEED) -> None:
 
 
 def get_device() -> torch.device:
+    """Use env `HAR_FORCE_DEVICE=cpu` to avoid MPS OOM / driver crashes on long LOSO runs."""
+    forced = os.environ.get("HAR_FORCE_DEVICE", "").strip().lower()
+    if forced in ("cpu", "cuda", "mps"):
+        return torch.device(forced)
     if torch.cuda.is_available():
         return torch.device("cuda")
     if torch.backends.mps.is_available():

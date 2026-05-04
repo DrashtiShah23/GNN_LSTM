@@ -1,0 +1,86 @@
+{
+  "pamap2_ImprovedGNNLSTM_vs_GNNLSTMold": {
+    "comparison": "ImprovedGNNLSTM vs GNN+LSTM(old)",
+    "n_folds": 9,
+    "mean_ImprovedGNNLSTM": 0.7152,
+    "mean_GNNLSTM(old)": 0.6722705254608985,
+    "delta_mean": 0.04292947453910145,
+    "t_statistic": 0.5496639887449504,
+    "p_value": 0.597555602700457,
+    "significant_p05": false
+  },
+  "pamap2_AttnAdj_vs_ImprovedGNNLSTM": {
+    "comparison": "AttnAdj vs ImprovedGNNLSTM",
+    "n_folds": 9,
+    "mean_AttnAdj": 0.8146333333333333,
+    "mean_ImprovedGNNLSTM": 0.7152,
+    "delta_mean": 0.09943333333333337,
+    "t_statistic": 1.719725810259831,
+    "p_value": 0.123797069202856,
+    "significant_p05": false
+  },
+  "hhar_AttnAdj_vs_ImprovedGNNLSTM": {
+    "comparison": "AttnAdj vs ImprovedGNNLSTM",
+    "n_folds": 9,
+    "mean_AttnAdj": 0.5122222222222222,
+    "mean_ImprovedGNNLSTM": 0.5317777777777779,
+    "delta_mean": -0.01955555555555566,
+    "t_statistic": -1.0082359714962337,
+    "p_value": 0.34285979731965804,
+    "significant_p05": false
+  },
+  "legacy_gnn_vs_gnn_lstm_accuracy": {
+    "n_pairs": 9,
+    "mean_a": 0.6267335990698357,
+    "mean_b": 0.5757265424437444,
+    "std_a": 0.17997223694046607,
+    "std_b": 0.229001426307694,
+    "t_statistic": 1.6908184871258272,
+    "p_value": 0.12933688490619072
+  },
+  "legacy_gnn_vs_gnn_lstm_macro_f1": {
+    "n_pairs": 9,
+    "mean_a": 0.5508467622775272,
+    "mean_b": 0.5108766896231027,
+    "std_a": 0.210619666034054,
+    "std_b": 0.21178101617669237,
+    "t_statistic": 0.8249356670573189,
+    "p_value": 0.43331521887515617
+  },
+  "legacy_gnn_vs_lstm_accuracy": {
+    "n_pairs": 9,
+    "mean_a": 0.6267335990698357,
+    "mean_b": 0.6125412973127253,
+    "std_a": 0.17997223694046607,
+    "std_b": 0.11076917176238282,
+    "t_statistic": 0.20147039657638421,
+    "p_value": 0.8453592120126018
+  },
+  "legacy_gnn_vs_lstm_macro_f1": {
+    "n_pairs": 9,
+    "mean_a": 0.5508467622775272,
+    "mean_b": 0.5066388797419711,
+    "std_a": 0.210619666034054,
+    "std_b": 0.18008974990355975,
+    "t_statistic": 1.362272335865244,
+    "p_value": 0.21022612806951177
+  },
+  "legacy_lstm_vs_gnn_lstm_accuracy": {
+    "n_pairs": 9,
+    "mean_a": 0.6125412973127253,
+    "mean_b": 0.5757265424437444,
+    "std_a": 0.11076917176238282,
+    "std_b": 0.229001426307694,
+    "t_statistic": 0.40570226835960593,
+    "p_value": 0.6955954674253506
+  },
+  "legacy_lstm_vs_gnn_lstm_macro_f1": {
+    "n_pairs": 9,
+    "mean_a": 0.5066388797419711,
+    "mean_b": 0.5108766896231027,
+    "std_a": 0.18008974990355975,
+    "std_b": 0.21178101617669237,
+    "t_statistic": -0.06976573424105756,
+    "p_value": 0.9460925098107633
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "description": "Train all subjects on source; test on target. Input: (128,3) wrist-phone accel.",
+  "hhar_windows_used": 12000,
+  "hhar_windows_total_before_subsample": 454577,
+  "hhar_classes": [
+    "bike",
+    "sit",
+    "stand",
+    "walk",
+    "stairsup",
+    "stairsdown"
+  ],
+  "pamap2_eval_windows": 10424,
+  "lstm_train_cap": 5000,
+  "note": "Default RF-only for speed; use --lstm for neural transfer (slow on CPU).",
+  "include_lstm": false,
+  "directions": {
+    "train_hhar_test_pamap2": {
+      "rf": {
+        "accuracy": 0.17900997697620874,
+        "macro_f1": 0.07860783565452023,
+        "balanced_acc": 0.19530074594098823
+      }
+    },
+    "train_pamap2_test_hhar": {
+      "rf": {
+        "accuracy": 0.17558333333333334,
+        "macro_f1": 0.056846974742712365,
+        "balanced_acc": 0.17045427749481232
+      }
+    }
+  }
+}
