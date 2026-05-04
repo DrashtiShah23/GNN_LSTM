@@ -187,22 +187,3 @@ Input windows  →  [GCN Layer 1]  →  [GCN Layer 2]  →  Mean Pool
 
 ---
 
-## Progress Checklist
-
-- [x] Project structure scaffolded
-- [x] Config & hyperparameters defined
-- [x] Preprocessing pipeline (resample, normalise, sliding window)
-- [x] Graph construction (fixed & learnable adjacency, rich node features)
-- [x] Dataset classes (flat, graph, sequence with subject-boundary safety)
-- [x] GNN + LSTM model + ablations (GNN-only, LSTM-only)
-- [x] Training loop with early stopping + LOSO splits (100 epochs, patience=15)
-- [x] Classical baselines (SVM, RF, XGBoost) — PAMAP2 LOSO ✅
-- [x] PAMAP2 data downloaded & preprocessed (15,049 windows × 128 × 18)
-- [x] HHAR data downloaded & preprocessed (454,577 windows → 45,000 capped × 128 × 3)
-- [x] Deep model LOSO evaluation — PAMAP2 ✅ (LSTM 59.4%, GNN 72.1%, GNN+LSTM 64.2%)
-- [x] Deep model LOSO evaluation — HHAR ✅ (LSTM 48.2%, GNN 60.1%, GNN+LSTM 56.3%)
-- [x] SHAP feature importance for RF on PAMAP2 ✅ → `results/plots/shap_rf_pamap2.png`
-- [x] Model profiling — parameter count & latency ✅ → `results/plots/model_profiling.png`
-- [x] Confusion matrices & comparison plots ✅ → `results/plots/` (15 plots total)
-- [x] Unit tests: 15/15 passing
-- [ ] Final report writing
