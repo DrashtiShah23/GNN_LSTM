@@ -60,7 +60,8 @@
         "accuracy": 0.6666666666666666,
         "macro_f1": 0.16
       }
-    ]
+    ],
+    "balanced_acc_std": 0.104812
   },
   "gnn": {
     "accuracy": 0.682370921655924,
@@ -123,7 +124,8 @@
         "accuracy": 0.16666666666666666,
         "macro_f1": 0.04081632653061224
       }
-    ]
+    ],
+    "balanced_acc_std": 0.178228
   },
   "gnn_lstm": {
     "accuracy": 0.6884154460719041,
@@ -200,6 +202,7 @@
       "lr": 0.0008,
       "weight_decay": 4e-05,
       "patience": 25
-    }
+    },
+    "balanced_acc_std": 0.101447
   }
 }

@@ -6,7 +6,7 @@
       "macro_f1": 0.724375,
       "macro_f1_std": 0.252531,
       "balanced_acc": 0.791843,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.180641
     },
     "Random Forest": {
       "accuracy": 0.77485,
@@ -14,7 +14,7 @@
       "macro_f1": 0.71212,
       "macro_f1_std": 0.250112,
       "balanced_acc": 0.77485,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.178031
     },
     "XGBoost": {
       "accuracy": 0.807553,
@@ -22,7 +22,7 @@
       "macro_f1": 0.731419,
       "macro_f1_std": 0.239793,
       "balanced_acc": 0.807553,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.128474
     },
     "LSTM-only": {
       "accuracy": 0.5939,
@@ -30,7 +30,7 @@
       "macro_f1": 0.5951,
       "macro_f1_std": 0.16979,
       "balanced_acc": 0.5896,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.104812
     },
     "GNN-only": {
       "accuracy": 0.7206,
@@ -38,7 +38,7 @@
       "macro_f1": 0.7151,
       "macro_f1_std": 0.198574,
       "balanced_acc": 0.708,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.178228
     },
     "GNN+LSTM (old)": {
       "accuracy": 0.6418,
@@ -46,39 +46,39 @@
       "macro_f1": 0.5874,
       "macro_f1_std": 0.155934,
       "balanced_acc": 0.6276,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.101447
     },
     "GNN (fixed adj)": {
       "accuracy": 0.691142,
-      "accuracy_std": null,
+      "accuracy_std": 0.194871,
       "macro_f1": 0.678347,
-      "macro_f1_std": null,
+      "macro_f1_std": 0.212564,
       "balanced_acc": 0.671689,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.190596
     },
     "GNN (learnable adj)": {
       "accuracy": 0.694,
-      "accuracy_std": null,
+      "accuracy_std": 0.132282,
       "macro_f1": 0.688992,
-      "macro_f1_std": null,
+      "macro_f1_std": 0.194629,
       "balanced_acc": 0.680512,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.136314
     },
     "Flatten+LSTM": {
       "accuracy": 0.845278,
-      "accuracy_std": null,
+      "accuracy_std": 0.180013,
       "macro_f1": 0.793502,
-      "macro_f1_std": null,
+      "macro_f1_std": 0.198793,
       "balanced_acc": 0.788622,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.125925
     },
     "CNN1D": {
       "accuracy": 0.785966,
-      "accuracy_std": null,
+      "accuracy_std": 0.169871,
       "macro_f1": 0.793754,
-      "macro_f1_std": null,
+      "macro_f1_std": 0.242543,
       "balanced_acc": 0.789486,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.160614
     },
     "ImprovedGNNLSTM \u2605": {
       "accuracy": 0.804261,
@@ -86,7 +86,7 @@
       "macro_f1": 0.742095,
       "macro_f1_std": 0.243815,
       "balanced_acc": 0.751722,
-      "balanced_acc_std": 0.253191
+      "balanced_acc_std": 0.105858
     },
     "ImprovedGNNLSTM+AttnAdj \u2605": {
       "accuracy": 0.850866,
@@ -94,7 +94,7 @@
       "macro_f1": 0.808259,
       "macro_f1_std": 0.172451,
       "balanced_acc": 0.808365,
-      "balanced_acc_std": 0.128795
+      "balanced_acc_std": 0.124195
     }
   },
   "hhar": {
@@ -104,7 +104,7 @@
       "macro_f1": 0.566791,
       "macro_f1_std": 0.094898,
       "balanced_acc": 0.581235,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.088067
     },
     "Random Forest": {
       "accuracy": 0.563036,
@@ -112,7 +112,7 @@
       "macro_f1": 0.548051,
       "macro_f1_std": 0.104248,
       "balanced_acc": 0.563036,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.089629
     },
     "XGBoost": {
       "accuracy": 0.590036,
@@ -120,7 +120,7 @@
       "macro_f1": 0.577894,
       "macro_f1_std": 0.094247,
       "balanced_acc": 0.590036,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.082892
     },
     "LSTM-only": {
       "accuracy": 0.519956,
@@ -128,7 +128,7 @@
       "macro_f1": 0.522265,
       "macro_f1_std": 0.112352,
       "balanced_acc": 0.520069,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.106981
     },
     "GNN-only": {
       "accuracy": 0.593178,
@@ -136,15 +136,15 @@
       "macro_f1": 0.595658,
       "macro_f1_std": 0.141229,
       "balanced_acc": 0.590328,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.146636
     },
     "CNN1D": {
       "accuracy": 0.662653,
-      "accuracy_std": null,
+      "accuracy_std": 0.086749,
       "macro_f1": 0.65855,
-      "macro_f1_std": null,
+      "macro_f1_std": 0.095384,
       "balanced_acc": 0.660239,
-      "balanced_acc_std": null
+      "balanced_acc_std": 0.081577
     },
     "ImprovedGNNLSTM \u2605": {
       "accuracy": 0.531778,
@@ -152,7 +152,7 @@
       "macro_f1": 0.493288,
       "macro_f1_std": 0.065117,
       "balanced_acc": 0.513608,
-      "balanced_acc_std": 0.04668
+      "balanced_acc_std": 0.051803
     },
     "ImprovedGNNLSTM+AttnAdj": {
       "accuracy": 0.512222,
@@ -160,7 +160,7 @@
       "macro_f1": 0.478652,
       "macro_f1_std": 0.073067,
       "balanced_acc": 0.494992,
-      "balanced_acc_std": 0.059004
+      "balanced_acc_std": 0.062483
     }
   }
 }

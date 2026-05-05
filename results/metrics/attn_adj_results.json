@@ -5,7 +5,7 @@
     "macro_f1": 0.8082588437364175,
     "macro_f1_std": 0.17245103248672566,
     "balanced_acc": 0.8083645669497193,
-    "balanced_acc_std": 0.1287950137166925,
+    "balanced_acc_std": 0.124195,
     "per_fold": {
       "accuracy": [
         0.8394,
@@ -48,7 +48,7 @@
     "macro_f1": 0.47865201529272533,
     "macro_f1_std": 0.07306684264542593,
     "balanced_acc": 0.4949916620434675,
-    "balanced_acc_std": 0.059003843086987105,
+    "balanced_acc_std": 0.062483,
     "per_fold": {
       "accuracy": [
         0.438,

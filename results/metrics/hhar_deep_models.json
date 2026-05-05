@@ -60,7 +60,8 @@
         "accuracy": 0.537,
         "macro_f1": 0.5179809407200325
       }
-    ]
+    ],
+    "balanced_acc_std": 0.106981
   },
   "gnn": {
     "accuracy": 0.5931777777777778,
@@ -123,7 +124,8 @@
         "accuracy": 0.5358,
         "macro_f1": 0.52081204068014
       }
-    ]
+    ],
+    "balanced_acc_std": 0.146636
   },
   "gnn_lstm": {
     "accuracy": 0.5751111111111111,

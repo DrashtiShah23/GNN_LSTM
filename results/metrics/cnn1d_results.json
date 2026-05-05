@@ -2,12 +2,18 @@
   "pamap2": {
     "accuracy": 0.7859658449066383,
     "macro_f1": 0.7937544136778308,
-    "balanced_acc": 0.789485920375876
+    "balanced_acc": 0.789485920375876,
+    "accuracy_std": 0.169871,
+    "macro_f1_std": 0.242543,
+    "balanced_acc_std": 0.160614
   },
   "hhar": {
     "accuracy": 0.6626534118532174,
     "macro_f1": 0.658549819480882,
     "balanced_acc": 0.6602388294914938,
-    "note": "full HHAR 454K windows, val_loss early stopping"
+    "note": "full HHAR 454K windows, val_loss early stopping",
+    "accuracy_std": 0.086749,
+    "macro_f1_std": 0.095384,
+    "balanced_acc_std": 0.081577
   }
 }
