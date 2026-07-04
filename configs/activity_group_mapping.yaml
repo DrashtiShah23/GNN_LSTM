@@ -1,0 +1,72 @@
+# Health-relevant activity group mapping (dataset-specific)
+# Edit mappings here without changing code.
+
+pamap2:
+  Sedentary_or_Rest:
+    - lying
+    - sitting
+    - watching_TV
+    - computer_work
+    - car_driving
+  Ambulatory_Movement:
+    - standing
+    - walking
+    - nordic_walking
+  Stair_or_High_Intensity_Movement:
+    - ascending_stairs
+    - descending_stairs
+    - running
+    - rope_jumping
+  Vigorous_Activity:
+    - cycling
+    - playing_soccer
+    - vacuum_cleaning
+    - house_cleaning
+  Postural_Activities:
+    - ironing
+    - folding_laundry
+  Unmapped_or_Other:
+    - transient
+
+hhar:
+  Sedentary_or_Rest:
+    - sit
+    - stand
+  Ambulatory_Movement:
+    - walk
+    - bike
+  Stair_or_High_Intensity_Movement:
+    - stairsup
+    - stairsdown
+  Vigorous_Activity: []
+  Postural_Activities: []
+  Unmapped_or_Other: []
+
+# Label id → name lookups (after remap to contiguous ids in processed arrays)
+pamap2_label_names:
+  1: lying
+  2: sitting
+  3: standing
+  4: walking
+  5: running
+  6: cycling
+  7: nordic_walking
+  9: watching_TV
+  10: computer_work
+  11: car_driving
+  12: ascending_stairs
+  13: descending_stairs
+  14: vacuum_cleaning
+  15: ironing
+  16: folding_laundry
+  17: house_cleaning
+  18: playing_soccer
+  24: rope_jumping
+
+hhar_label_names:
+  0: bike
+  1: sit
+  2: stand
+  3: walk
+  4: stairsup
+  5: stairsdown

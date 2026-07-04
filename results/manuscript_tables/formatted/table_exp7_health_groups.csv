@@ -1,0 +1,28 @@
+Dataset,Clinical_Activity_Group,Included_Activities,Sensitivity,Specificity,Macro_F1,Main_Confusion
+pamap2,Ambulatory_Movement,standing; walking,77.30,97.87,82.48,Ambulatory_Movement→Sedentary_or_Rest
+pamap2,Postural_Activities,ironing,70.86,94.45,67.37,Postural_Activities→Sedentary_or_Rest
+pamap2,Sedentary_or_Rest,lying; sitting; computer_work; car_driving,82.79,88.09,78.97,Sedentary_or_Rest→Postural_Activities
+pamap2,Stair_or_High_Intensity_Movement,running,76.53,99.09,82.12,Stair_or_High_Intensity_Movement→Sedentary_or_Rest
+pamap2,Unmapped_or_Other,transient,87.55,97.62,83.74,Unmapped_or_Other→Sedentary_or_Rest
+pamap2,Vigorous_Activity,cycling; vacuum_cleaning; house_cleaning,78.55,96.52,82.05,Vigorous_Activity→Postural_Activities
+pamap2,Ambulatory_Movement,standing; walking,80.23,97.82,84.23,Ambulatory_Movement→Sedentary_or_Rest
+pamap2,Postural_Activities,ironing,75.14,96.43,74.93,Postural_Activities→Vigorous_Activity
+pamap2,Sedentary_or_Rest,lying; sitting; computer_work; car_driving,85.28,90.77,82.77,Sedentary_or_Rest→Postural_Activities
+pamap2,Stair_or_High_Intensity_Movement,running,89.68,99.20,90.40,Stair_or_High_Intensity_Movement→Vigorous_Activity
+pamap2,Unmapped_or_Other,transient,90.60,98.89,90.30,Unmapped_or_Other→Sedentary_or_Rest
+pamap2,Vigorous_Activity,cycling; vacuum_cleaning; house_cleaning,81.39,95.27,81.77,Vigorous_Activity→Sedentary_or_Rest
+pamap2,Ambulatory_Movement,standing; walking,93.16,95.64,87.19,Ambulatory_Movement→Sedentary_or_Rest
+pamap2,Postural_Activities,ironing,88.11,97.11,84.46,Postural_Activities→Vigorous_Activity
+pamap2,Sedentary_or_Rest,lying; sitting; computer_work; car_driving,84.42,95.67,86.96,Sedentary_or_Rest→Ambulatory_Movement
+pamap2,Stair_or_High_Intensity_Movement,running,92.86,98.62,89.31,Stair_or_High_Intensity_Movement→Vigorous_Activity
+pamap2,Unmapped_or_Other,transient,93.29,98.97,92.05,Unmapped_or_Other→Sedentary_or_Rest
+pamap2,Vigorous_Activity,cycling; vacuum_cleaning; house_cleaning,76.03,96.88,81.01,Vigorous_Activity→Ambulatory_Movement
+hhar,Ambulatory_Movement,bike; walk,69.94,82.89,68.16,Ambulatory_Movement→Stair_or_High_Intensity_Movement
+hhar,Sedentary_or_Rest,sit; stand,62.43,85.80,64.71,Sedentary_or_Rest→Stair_or_High_Intensity_Movement
+hhar,Stair_or_High_Intensity_Movement,stairsup; stairsdown,65.17,79.93,64.68,Stair_or_High_Intensity_Movement→Ambulatory_Movement
+hhar,Ambulatory_Movement,bike; walk,52.21,91.85,61.79,Ambulatory_Movement→Sedentary_or_Rest
+hhar,Sedentary_or_Rest,sit; stand,69.07,66.75,57.43,Sedentary_or_Rest→Stair_or_High_Intensity_Movement
+hhar,Stair_or_High_Intensity_Movement,stairsup; stairsdown,49.25,76.24,51.22,Stair_or_High_Intensity_Movement→Sedentary_or_Rest
+hhar,Ambulatory_Movement,bike; walk,65.74,79.23,63.06,Ambulatory_Movement→Stair_or_High_Intensity_Movement
+hhar,Sedentary_or_Rest,sit; stand,46.05,90.72,55.48,Sedentary_or_Rest→Stair_or_High_Intensity_Movement
+hhar,Stair_or_High_Intensity_Movement,stairsup; stairsdown,63.50,67.41,57.06,Stair_or_High_Intensity_Movement→Ambulatory_Movement

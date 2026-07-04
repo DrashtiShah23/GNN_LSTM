@@ -1,0 +1,7 @@
+Dataset,Model,Fine_Grained_Accuracy,Group_Level_Accuracy,Fine_Grained_Macro_F1,Group_Level_Macro_F1
+pamap2,CNN1D,73.96,79.41,74.69,79.45
+pamap2,Flatten_LSTM,79.16,83.22,75.90,84.07
+pamap2,Improved_GNN_LSTM,81.62,86.22,74.20,86.83
+hhar,CNN1D,61.31,65.86,60.67,65.85
+hhar,Flatten_LSTM,52.84,56.51,50.02,56.81
+hhar,Improved_GNN_LSTM,53.40,58.69,50.89,58.53

@@ -1,0 +1,7 @@
+Dataset,Model,Accuracy_Mean,Accuracy_SD,Accuracy_CI95_Lower,Accuracy_CI95_Upper,Macro_F1_Mean,Macro_F1_SD,Macro_F1_CI95_Lower,Macro_F1_CI95_Upper,Effect_Size,Wilcoxon_P_Value,Rank_Stability,Accuracy_Mean_SD,Macro_F1_Mean_SD
+pamap2,CNN1D,74.50,16.35,63.82,85.18,65.37,25.17,48.93,81.82,d = 4.05,p = 0.0039,rank1:9/9,74.50 ± 16.35,65.37 ± 25.17
+pamap2,Flatten_LSTM,75.97,10.13,69.35,82.59,68.10,14.73,58.48,77.72,d = 6.68,p = 0.0039,rank1:4/9; rank2:5/9,75.97 ± 10.13,68.10 ± 14.73
+pamap2,Improved_GNN_LSTM,72.91,27.42,54.99,90.82,67.56,25.79,50.71,84.41,d = 2.36,p = 0.0078,rank1:4/9; rank2:4/9; rank3:1/9,72.91 ± 27.42,67.56 ± 25.79
+hhar,CNN1D,61.31,7.50,56.41,66.21,59.02,8.21,53.65,64.38,d = 5.95,p = 0.0039,rank1:9/9,61.31 ± 7.50,59.02 ± 8.21
+hhar,Flatten_LSTM,52.84,7.24,48.12,57.57,48.06,7.71,43.03,53.10,d = 5.00,p = 0.0039,rank1:1/9; rank2:8/9,52.84 ± 7.24,48.06 ± 7.71
+hhar,Improved_GNN_LSTM,53.40,7.76,48.33,58.47,45.68,9.25,39.64,51.72,d = 4.73,p = 0.0039,rank1:1/9; rank2:5/9; rank3:3/9,53.40 ± 7.76,45.68 ± 9.25

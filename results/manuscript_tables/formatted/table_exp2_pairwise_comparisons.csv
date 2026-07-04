@@ -1,0 +1,7 @@
+Dataset,Metric,Model_A,Model_B,Mean_Difference,Bootstrap_CI95_Lower,Bootstrap_CI95_Upper,Effect_Size,Wilcoxon_P_Value
+pamap2,accuracy,CNN1D,Flatten_LSTM,-1.47,-14.12,8.88,d = -0.08,p = 0.9102
+pamap2,accuracy,CNN1D,Improved_GNN_LSTM,1.60,-16.68,23.29,d = 0.05,p = 0.6523
+pamap2,accuracy,Flatten_LSTM,Improved_GNN_LSTM,3.07,-4.63,15.40,d = 0.17,p = 0.4961
+hhar,accuracy,CNN1D,Flatten_LSTM,8.47,3.59,13.33,d = 1.09,p = 0.0195
+hhar,accuracy,CNN1D,Improved_GNN_LSTM,7.91,4.05,11.76,d = 1.23,p = 0.0117
+hhar,accuracy,Flatten_LSTM,Improved_GNN_LSTM,-0.56,-4.02,3.96,d = -0.09,p = 0.4258

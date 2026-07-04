@@ -35,3 +35,33 @@ results/run_full_pipeline.pid
 
 # Env
 .env
+
+
+# Data and results
+results/logs/
+results/experiment_*/predictions/
+results/experiment_*/fold_*/
+checkpoints/
+data/
+
+# Figures and PDFs (too large for git)
+results/manuscript_figures/*.png
+results/manuscript_figures/*.pdf
+results/experiment_*/*.png
+results/experiment_*/*.pdf
+
+# Keep these manuscript outputs tracked
+!results/manuscript_tables/
+!results/manuscript_tables/combined/
+!results/manuscript_tables/formatted/
+!MANUSCRIPT_RESULTS.md
+!PUBLICATION_EXPERIMENTS_README.md
+
+# Python
+__pycache__/
+*.pyc
+*.pth
+*.pt
+.venv/
+*.log
+.DS_Store

@@ -1,0 +1,54 @@
+# Publication experiment configuration (single source of truth)
+seed: 42
+datasets:
+  - pamap2
+  - hhar
+
+# HHAR subsample cap (matches run_improved_gnnlstm.py default)
+hhar_max_windows_per_subject: 5000
+
+window:
+  size: 128
+  overlap_fraction: 0.5          # overlapping mode → stride 64
+  non_overlap_stride: 128          # non-overlapping mode
+
+sequence:
+  seq_len: 10
+  stride: 10
+
+models:
+  - CNN1D
+  - Flatten_LSTM
+  - Improved_GNN_LSTM
+
+model_aliases:
+  CNN1D: CNN1D
+  Flatten_LSTM: Flatten_LSTM
+  Improved_GNN_LSTM: Improved_GNN_LSTM
+
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  num_epochs: 100
+  patience: 15
+  val_fraction: 0.15
+  grad_clip: 1.0
+
+evaluation_protocols:
+  - random_holdout
+  - loso
+
+window_types:
+  - overlapping
+  - non_overlapping
+
+results_root: results
+activity_group_config: configs/activity_group_mapping.yaml
+
+smoke:
+  datasets: [pamap2]
+  max_folds: 1
+  max_windows_per_subject: 500
+  num_epochs: 3
+  models: [CNN1D]

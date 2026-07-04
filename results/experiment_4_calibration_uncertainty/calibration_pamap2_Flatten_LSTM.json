@@ -1,0 +1,14 @@
+{
+  "ece": 0.09838758325687896,
+  "brier_score": 0.3308328688144684,
+  "nll": 0.7628586888313293,
+  "accuracy_at_90_coverage": 0.8297557364914878,
+  "macro_f1_at_90_coverage": 0.8000455585871379,
+  "balanced_acc_at_90_coverage": 0.7915134647294387,
+  "accuracy_at_80_coverage": 0.858451290591174,
+  "macro_f1_at_80_coverage": 0.8323615101578596,
+  "balanced_acc_at_80_coverage": 0.8228045628146105,
+  "accuracy_at_70_coverage": 0.8772597526165556,
+  "macro_f1_at_70_coverage": 0.8327192651360575,
+  "balanced_acc_at_70_coverage": 0.8207544914297414
+}
