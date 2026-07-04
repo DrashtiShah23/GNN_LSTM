@@ -107,6 +107,7 @@ def train_model(
     val_loader: DataLoader,
     use_adj: bool = True,
     run_name: str = "model",
+    plot_history: bool = False,
 ) -> Dict:
     device = get_device()
     model = model.to(device)
@@ -164,6 +165,10 @@ def train_model(
     out_dir.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), out_dir / f"{run_name}.pt")
     print(f"  Best val loss: {best_val_loss:.4f}  val acc: {best_val_acc:.4f} — saved to {MODELS_DIR}/{run_name}.pt")
+
+    if plot_history and history["train_loss"]:
+        from src.evaluation import plot_training_history
+        plot_training_history(history, run_name=run_name)
 
     return {"history": history, "best_val_acc": best_val_acc}
 

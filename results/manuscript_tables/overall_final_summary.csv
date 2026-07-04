@@ -1,0 +1,10 @@
+Table,Rows,Datasets
+table_exp1_leakage_control.csv,24,"hhar,pamap2"
+table_exp2_pairwise_comparisons.csv,6,"hhar,pamap2"
+table_exp2_statistical_reliability.csv,6,"hhar,pamap2"
+table_exp3_robustness.csv,108,"hhar,pamap2"
+table_exp4_calibration.csv,6,"hhar,pamap2"
+table_exp5_subject_failure.csv,54,"hhar,pamap2"
+table_exp6_few_shot_calibration.csv,378,"hhar,pamap2"
+table_exp7_fine_vs_group.csv,6,"hhar,pamap2"
+table_exp7_health_groups.csv,27,"hhar,pamap2"

@@ -6,7 +6,7 @@ Edges are initialised from physical proximity (fixed) or learned
 from the data (learnable / attention-based), as described in the proposal.
 
 For PAMAP2: nodes = [wrist, chest, ankle]  (3 IMUs)
-For HHAR:   nodes = [phone, watch]          (2 device types)
+For HHAR:   nodes = [accel x-axis, y-axis, z-axis]  (3 nodes; fully connected)
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ def build_pamap2_adj() -> Tensor:
 
 
 def build_hhar_adj() -> Tensor:
-    """Fixed adjacency for HHAR (x-axis=0, y-axis=1, z-axis=2 — fully connected)."""
+    """Fixed adjacency for HHAR: nodes 0=x, 1=y, 2=z; edges connect all pairs (triangle)."""
     from src.config import HHAR_EDGES
     return build_fixed_adj(HHAR_EDGES, n_nodes=3)
 

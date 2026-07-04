@@ -402,8 +402,8 @@ def run_dataset(
         n_nodes       = 3
         adj_builder   = build_pamap2_adj
     else:
-        node_feat_dim = HHAR_NODE_FEAT_DIM    # 18
-        n_nodes       = 2
+        node_feat_dim = HHAR_NODE_FEAT_DIM    # 6 (per axis-node)
+        n_nodes       = 3                     # accel x, y, z — see graph_construction.py
         adj_builder   = build_hhar_adj
 
     mtypes = model_types or ["lstm", "gnn", "gnn_lstm"]

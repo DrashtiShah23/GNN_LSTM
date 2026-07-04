@@ -164,26 +164,127 @@ def plot_confusion_matrix(
     plt.show()
 
 
-def plot_training_history(history: dict, run_name: str = "model") -> None:
-    """Plot train/val loss and val accuracy curves."""
+def plot_training_history(
+    history: dict,
+    run_name: str = "model",
+    *,
+    best_epoch: int | None = None,
+    stop_epoch: int | None = None,
+    early_stopped: bool | None = None,
+    reg_summary: str | None = None,
+    suptitle: str | None = None,
+    output_path: Path | None = None,
+) -> Path:
+    """Plot train/val loss and val accuracy curves; save PNG under PLOTS_DIR."""
+    import matplotlib
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.gridspec import GridSpec
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+    n_epochs = len(history["train_loss"])
+    epochs = list(range(1, n_epochs + 1))
+    if best_epoch is None:
+        best_epoch = int(np.argmin(history["val_loss"])) + 1
+    if stop_epoch is None:
+        stop_epoch = n_epochs
 
-    ax1.plot(history["train_loss"], label="Train Loss")
-    ax1.plot(history["val_loss"], label="Val Loss")
+    has_footer = reg_summary is not None
+    fig = plt.figure(figsize=(12, 7.2 if has_footer else 4.0))
+    gs = GridSpec(2 if has_footer else 1, 2, figure=fig, height_ratios=[4, 1.55] if has_footer else [1])
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[0, 1])
+    ax_note = fig.add_subplot(gs[1, :]) if has_footer else None
+
+    ax1.plot(epochs, history["train_loss"], label="Train Loss")
+    ax1.plot(epochs, history["val_loss"], label="Val Loss")
+    ax1.axvline(best_epoch, color="#2ca02c", linestyle="--", linewidth=1.2, alpha=0.85,
+                label=f"Best epoch ({best_epoch})")
+    show_stop = early_stopped or (stop_epoch != best_epoch)
+    if show_stop:
+        ax1.axvline(stop_epoch, color="#d62728", linestyle=":", linewidth=1.2, alpha=0.85,
+                    label=f"Stop epoch ({stop_epoch})")
     ax1.set_title("Loss Curves")
     ax1.set_xlabel("Epoch")
-    ax1.legend()
+    ax1.set_ylabel("Loss")
+    ax1.legend(loc="upper right", fontsize=8)
 
-    ax2.plot(history["val_acc"], label="Val Accuracy", color="green")
+    ax2.plot(epochs, history["val_acc"], label="Val Accuracy", color="green")
+    ax2.axvline(best_epoch, color="#2ca02c", linestyle="--", linewidth=1.2, alpha=0.85,
+                label="Best epoch")
+    if show_stop:
+        ax2.axvline(stop_epoch, color="#d62728", linestyle=":", linewidth=1.2, alpha=0.85,
+                    label="Stop epoch")
     ax2.set_title("Validation Accuracy")
     ax2.set_xlabel("Epoch")
-    ax2.legend()
+    ax2.set_ylabel("Accuracy")
+    ax2.legend(loc="lower right", fontsize=8)
 
-    plt.tight_layout()
-    out_dir = Path(PLOTS_DIR)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_dir / f"{run_name}_history.png", dpi=150)
-    print(f"  Saved training history to {PLOTS_DIR}/{run_name}_history.png")
-    plt.show()
+    if suptitle:
+        fig.suptitle(suptitle, fontsize=11, fontweight="bold")
+
+    if ax_note is not None and reg_summary:
+        ax_note.axis("off")
+        ax_note.text(
+            0.5, 0.5, reg_summary,
+            transform=ax_note.transAxes,
+            ha="center", va="center",
+            fontsize=8,
+            family="monospace",
+            bbox=dict(boxstyle="round,pad=0.45", facecolor="#f7f7f7", edgecolor="#cccccc"),
+        )
+
+    fig.tight_layout()
+    out_path = Path(output_path) if output_path else Path(PLOTS_DIR) / f"{run_name}_loss_curves.png"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  Saved training history to {out_path}")
+    return out_path
+
+
+def plot_loso_folds_grid(
+    histories: list[dict],
+    titles: list[str],
+    out_path: Path,
+    *,
+    suptitle: str | None = None,
+) -> Path:
+    """3×N grid of train/val loss curves (one panel per LOSO fold)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    n = len(histories)
+    ncols = 3
+    nrows = int(np.ceil(n / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(14, 3.8 * nrows), squeeze=False)
+    if suptitle:
+        fig.suptitle(suptitle, fontsize=12, fontweight="bold")
+
+    for i, (hist, title) in enumerate(zip(histories, titles)):
+        r, c = divmod(i, ncols)
+        ax = axes[r, c]
+        epochs = list(range(1, len(hist["train_loss"]) + 1))
+        best_epoch = hist.get("best_epoch") or int(np.argmin(hist["val_loss"])) + 1
+        stop_epoch = hist.get("stop_epoch") or len(epochs)
+        ax.plot(epochs, hist["train_loss"], label="Train", linewidth=1.2)
+        ax.plot(epochs, hist["val_loss"], label="Val", linewidth=1.2)
+        ax.axvline(best_epoch, color="#2ca02c", linestyle="--", linewidth=0.9, alpha=0.8)
+        ax.axvline(stop_epoch, color="#d62728", linestyle=":", linewidth=0.9, alpha=0.8)
+        ax.set_title(title, fontsize=9)
+        ax.set_xlabel("Epoch", fontsize=8)
+        ax.set_ylabel("Loss", fontsize=8)
+        if i == 0:
+            ax.legend(fontsize=7, loc="upper right")
+
+    for j in range(n, nrows * ncols):
+        r, c = divmod(j, ncols)
+        axes[r, c].axis("off")
+
+    fig.tight_layout(rect=[0, 0, 1, 0.96] if suptitle else None)
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  Saved fold grid to {out_path}")
+    return out_path
