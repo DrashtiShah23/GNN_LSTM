@@ -1,0 +1,30 @@
+{
+  "status": "done",
+  "completed_at": "20260705_211844",
+  "summary": {
+    "dataset": "pamap2",
+    "eval_protocol": "random_holdout",
+    "model": "cnn",
+    "eval_unit": "window",
+    "n_samples": 6040,
+    "n_eval_samples": 6040,
+    "n_folds": 1,
+    "runtime_sec": 32.279218673706055,
+    "total_params": 302348,
+    "trainable_params": 302348,
+    "non_trainable_params": 0,
+    "parameter_size_mb_float32": 1.1533660888671875,
+    "n_nodes": 22,
+    "node_feat_dim": 23,
+    "accuracy": 0.9647350993377484,
+    "balanced_accuracy": 0.9632573790885927,
+    "macro_f1": 0.9645096959617323,
+    "weighted_f1": 0.964657802544369,
+    "macro_precision": 0.9661465239955257,
+    "macro_recall": 0.9632573790885927,
+    "subject_macro_accuracy_mean": 0.9647350993377484,
+    "subject_macro_accuracy_std": 0.0,
+    "subject_macro_f1_mean": 0.9645096959617323,
+    "subject_macro_f1_std": 0.0
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "status": "done",
+  "completed_at": "20260705_211801",
+  "summary": {
+    "dataset": "pamap2",
+    "eval_protocol": "loso",
+    "model": "gnn_attention_adj",
+    "eval_unit": "window",
+    "n_samples": 30199,
+    "n_eval_samples": 30199,
+    "n_folds": 9,
+    "runtime_sec": 567.6832304000854,
+    "total_params": 11376,
+    "trainable_params": 11376,
+    "non_trainable_params": 0,
+    "parameter_size_mb_float32": 0.04339599609375,
+    "n_nodes": 22,
+    "node_feat_dim": 23,
+    "accuracy": 0.7527732706381006,
+    "balanced_accuracy": 0.7245565097425986,
+    "macro_f1": 0.7257002738083815,
+    "weighted_f1": 0.7550166701703277,
+    "macro_precision": 0.7301100226738306,
+    "macro_recall": 0.7245565097425986,
+    "subject_macro_accuracy_mean": 0.6988144077624215,
+    "subject_macro_accuracy_std": 0.21887905818271802,
+    "subject_macro_f1_mean": 0.5914197103602898,
+    "subject_macro_f1_std": 0.24547540967990653
+  }
+}

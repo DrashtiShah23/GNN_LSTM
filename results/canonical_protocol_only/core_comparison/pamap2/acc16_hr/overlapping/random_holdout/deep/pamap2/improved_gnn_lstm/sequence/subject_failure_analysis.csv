@@ -1,0 +1,2 @@
+dataset,eval_protocol,model,subject,n_predictions,n_true_classes,accuracy,balanced_accuracy,macro_f1,weighted_f1,macro_precision,macro_recall,dominant_confusion
+pamap2,random_holdout,improved_gnn_lstm,mixed_subjects,6024,12,0.975929614873838,0.9733276194573035,0.9739999431088845,0.976031591800489,0.975075058894069,0.9733276194573035,2->3 (12)

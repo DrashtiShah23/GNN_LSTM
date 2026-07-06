@@ -1,0 +1,2 @@
+"dataset","eval_protocol","model","eval_unit","fold","test_subject","validation_subject","train_subjects","n_train_windows","n_val_windows","n_test_windows","n_train_eval_samples","n_val_eval_samples","n_test_eval_samples","feature_set","window_type","task","sessions"
+"pamap2","random_holdout","lstm","window","1","mixed_subjects","random_validation","101,102,103,104,105,106,107,108,109","20535","3624","6040","20535","3624","6040","acc16_hr","overlapping","protocol12","protocol"

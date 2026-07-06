@@ -1,0 +1,2 @@
+dataset,model,eval_unit,folds,overfit_risk_score_mean,overfit_risk_score_max,train_val_macro_f1_gap_mean,val_test_macro_f1_gap_mean,val_macro_f1_drop_mean,overfit_flag_f1_gap_gt_0_15_rate,overfit_flag_val_drop_gt_0_10_rate,overfit_flag_val_test_gap_gt_0_15_rate
+pamap2,gnn_lstm,sequence,9,0.43142386760698703,0.8870890122478237,0.26575087373715656,0.0017542416041589843,0.037223534323582524,0.4444444444444444,0.0,0.2222222222222222

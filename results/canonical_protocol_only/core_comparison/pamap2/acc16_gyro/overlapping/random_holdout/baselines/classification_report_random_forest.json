@@ -1,0 +1,87 @@
+{
+  "lying": {
+    "precision": 0.996742671009772,
+    "recall": 0.9532710280373832,
+    "f1-score": 0.9745222929936306,
+    "support": 642.0
+  },
+  "sitting": {
+    "precision": 0.9711538461538461,
+    "recall": 0.923217550274223,
+    "f1-score": 0.9465791940018744,
+    "support": 547.0
+  },
+  "standing": {
+    "precision": 0.8433382137628112,
+    "recall": 0.9584026622296173,
+    "f1-score": 0.897196261682243,
+    "support": 601.0
+  },
+  "walking": {
+    "precision": 0.9863574351978172,
+    "recall": 0.9691689008042895,
+    "f1-score": 0.9776876267748479,
+    "support": 746.0
+  },
+  "running": {
+    "precision": 1.0,
+    "recall": 0.934931506849315,
+    "f1-score": 0.9663716814159292,
+    "support": 292.0
+  },
+  "cycling": {
+    "precision": 1.0,
+    "recall": 0.9662698412698413,
+    "f1-score": 0.9828456104944501,
+    "support": 504.0
+  },
+  "nordic_walking": {
+    "precision": 0.9965811965811966,
+    "recall": 0.966832504145937,
+    "f1-score": 0.9814814814814815,
+    "support": 603.0
+  },
+  "ascending_stairs": {
+    "precision": 0.9393939393939394,
+    "recall": 0.9198813056379822,
+    "f1-score": 0.9295352323838081,
+    "support": 337.0
+  },
+  "descending_stairs": {
+    "precision": 0.9607843137254902,
+    "recall": 0.8672566371681416,
+    "f1-score": 0.9116279069767442,
+    "support": 339.0
+  },
+  "vacuum_cleaning": {
+    "precision": 0.8864468864468864,
+    "recall": 0.9166666666666666,
+    "f1-score": 0.9013035381750466,
+    "support": 528.0
+  },
+  "ironing": {
+    "precision": 0.864963503649635,
+    "recall": 0.9608108108108108,
+    "f1-score": 0.910371318822023,
+    "support": 740.0
+  },
+  "rope_jumping": {
+    "precision": 0.9929078014184397,
+    "recall": 0.8695652173913043,
+    "f1-score": 0.9271523178807947,
+    "support": 161.0
+  },
+  "accuracy": 0.9433774834437086,
+  "macro avg": {
+    "precision": 0.9532224839449862,
+    "recall": 0.9338562192737926,
+    "f1-score": 0.9422228719235727,
+    "support": 6040.0
+  },
+  "weighted avg": {
+    "precision": 0.9471844483449775,
+    "recall": 0.9433774834437086,
+    "f1-score": 0.9441208455470161,
+    "support": 6040.0
+  }
+}

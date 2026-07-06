@@ -1,0 +1,13 @@
+,lying,sitting,standing,walking,running,cycling,nordic_walking,ascending_stairs,descending_stairs,vacuum_cleaning,ironing,rope_jumping
+lying,2380,390,92,3,0,0,3,5,0,27,25,0
+sitting,206,1806,593,2,0,6,13,7,0,50,199,0
+standing,5,303,2395,0,0,0,0,1,0,2,250,0
+walking,0,0,26,3415,6,3,50,174,36,4,2,1
+running,0,0,20,17,1074,12,6,208,23,0,0,166
+cycling,0,3,17,9,16,2353,14,23,69,36,14,9
+nordic_walking,0,6,39,70,6,1,1880,386,531,8,1,0
+ascending_stairs,0,11,65,15,6,8,37,1526,71,33,20,16
+descending_stairs,0,3,19,94,7,31,86,188,1133,6,3,44
+vacuum_cleaning,3,59,46,10,0,81,13,19,5,2389,103,0
+ironing,0,138,525,0,12,183,1,1,0,81,2773,4
+rope_jumping,0,0,0,7,268,8,5,6,48,0,0,411

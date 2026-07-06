@@ -1,0 +1,18 @@
+{
+  "dataset": "pamap2",
+  "model": "lstm",
+  "eval_unit": "window",
+  "raw_window_shape": [
+    128,
+    10
+  ],
+  "n_nodes": 13,
+  "node_feat_dim": 23,
+  "n_classes": 12,
+  "total_params": 212812,
+  "trainable_params": 212812,
+  "non_trainable_params": 0,
+  "buffer_values": 0,
+  "parameter_size_mb_float32": 0.8118133544921875,
+  "profile_method": "computed from instantiated torch module using sum(p.numel())"
+}

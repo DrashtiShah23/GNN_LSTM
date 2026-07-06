@@ -1,0 +1,170 @@
+{
+  "job": {
+    "dataset": "pamap2",
+    "model": "gnn_flatten_lstm",
+    "run_root": "results\\canonical_protocol_only\\core_comparison\\pamap2\\acc16_gyro_hr\\overlapping\\random_holdout\\deep",
+    "processed_dir": "data\\processed\\canonical_protocol_only\\pamap2\\acc16_gyro_hr\\overlapping",
+    "eval_protocol": "random_holdout",
+    "epochs": 30,
+    "patience": 8,
+    "batch_size": 64,
+    "max_windows_per_subject": 5000,
+    "no_hhar_cap": false,
+    "max_windows_per_subject_arg": 5000,
+    "apply_window_cap_to_all_datasets": false,
+    "eval_unit": "sequence",
+    "val_strategy": "inner_subject",
+    "val_subject_policy": "round_robin",
+    "early_stop_metric": "val_macro_f1",
+    "early_stop_mode": "auto",
+    "sequence_length": 10,
+    "sequence_stride": 1,
+    "sequence_target_policy": "last",
+    "disable_cudnn_for_sequence_models": true,
+    "device": "cuda",
+    "num_workers": 0,
+    "seed": 42,
+    "skip_existing": false,
+    "experiments": [
+      "exp1_leakage_nonoverlap",
+      "exp2_statistical_reliability",
+      "exp3_robustness_sensor_failure",
+      "exp4_calibration_uncertainty",
+      "exp5_subject_failure",
+      "exp6_few_shot_calibration",
+      "exp7_health_group_analysis"
+    ]
+  },
+  "experiment_catalog": {
+    "exp1_leakage_nonoverlap": {
+      "title": "Leakage-Control Evaluation with Non-Overlapping Windows",
+      "goal": "Compare overlapping vs non-overlapping windows under random holdout and LOSO.",
+      "status_in_this_runner": "partial: this runner produces LOSO artifacts; non-overlap requires preprocessing with stride=window.",
+      "deliverables": [
+        "fold metrics",
+        "predictions",
+        "confusion matrices",
+        "model comparison inputs"
+      ]
+    },
+    "exp2_statistical_reliability": {
+      "title": "Statistical Reliability and Model Ranking Stability",
+      "goal": "Compute fold-level mean/std/CI and ranking stability across LOSO folds.",
+      "status_in_this_runner": "implemented: fold metrics and aggregate ranking CSV are written.",
+      "deliverables": [
+        "metrics_by_fold.csv",
+        "metrics_summary.csv",
+        "metrics_ranked_all_jobs.csv"
+      ]
+    },
+    "exp3_robustness_sensor_failure": {
+      "title": "Robustness to Sensor Failure, Noise, and Missing Data",
+      "goal": "Evaluate test-time degradation under missing/noisy sensors and windows.",
+      "status_in_this_runner": "metadata only: use saved checkpoints/predictions as base artifacts for robustness reruns.",
+      "deliverables": [
+        "checkpointed fold models"
+      ]
+    },
+    "exp4_calibration_uncertainty": {
+      "title": "Calibration, Uncertainty, and Selective Prediction",
+      "goal": "Store probabilities/logits for ECE, Brier, NLL, reliability diagrams and selective prediction.",
+      "status_in_this_runner": "implemented: per-sample predicted probabilities are saved when logits are available.",
+      "deliverables": [
+        "predictions.csv with proba_* columns",
+        "classification_report.csv"
+      ]
+    },
+    "exp5_subject_failure": {
+      "title": "Subject-Level Generalization Failure Analysis",
+      "goal": "Find hardest/easiest LOSO subjects and dominant confusions.",
+      "status_in_this_runner": "implemented: subject_failure_analysis.csv is written per job.",
+      "deliverables": [
+        "subject_failure_analysis.csv",
+        "confusion_matrix.csv/png"
+      ]
+    },
+    "exp6_few_shot_calibration": {
+      "title": "Few-Shot Subject Calibration",
+      "goal": "Fine-tune with 1/5/10 percent held-out-subject calibration data.",
+      "status_in_this_runner": "metadata only: saved fold checkpoints enable future fine-tuning experiments.",
+      "deliverables": [
+        "fold checkpoints"
+      ]
+    },
+    "exp7_health_group_analysis": {
+      "title": "Health-Relevant Activity Group Analysis",
+      "goal": "Map labels to clinically meaningful activity groups and report group-level metrics.",
+      "status_in_this_runner": "metadata only: predictions.csv can be remapped later for group metrics.",
+      "deliverables": [
+        "predictions.csv"
+      ]
+    }
+  },
+  "all_experiments_reference": {
+    "exp1_leakage_nonoverlap": {
+      "title": "Leakage-Control Evaluation with Non-Overlapping Windows",
+      "goal": "Compare overlapping vs non-overlapping windows under random holdout and LOSO.",
+      "status_in_this_runner": "partial: this runner produces LOSO artifacts; non-overlap requires preprocessing with stride=window.",
+      "deliverables": [
+        "fold metrics",
+        "predictions",
+        "confusion matrices",
+        "model comparison inputs"
+      ]
+    },
+    "exp2_statistical_reliability": {
+      "title": "Statistical Reliability and Model Ranking Stability",
+      "goal": "Compute fold-level mean/std/CI and ranking stability across LOSO folds.",
+      "status_in_this_runner": "implemented: fold metrics and aggregate ranking CSV are written.",
+      "deliverables": [
+        "metrics_by_fold.csv",
+        "metrics_summary.csv",
+        "metrics_ranked_all_jobs.csv"
+      ]
+    },
+    "exp3_robustness_sensor_failure": {
+      "title": "Robustness to Sensor Failure, Noise, and Missing Data",
+      "goal": "Evaluate test-time degradation under missing/noisy sensors and windows.",
+      "status_in_this_runner": "metadata only: use saved checkpoints/predictions as base artifacts for robustness reruns.",
+      "deliverables": [
+        "checkpointed fold models"
+      ]
+    },
+    "exp4_calibration_uncertainty": {
+      "title": "Calibration, Uncertainty, and Selective Prediction",
+      "goal": "Store probabilities/logits for ECE, Brier, NLL, reliability diagrams and selective prediction.",
+      "status_in_this_runner": "implemented: per-sample predicted probabilities are saved when logits are available.",
+      "deliverables": [
+        "predictions.csv with proba_* columns",
+        "classification_report.csv"
+      ]
+    },
+    "exp5_subject_failure": {
+      "title": "Subject-Level Generalization Failure Analysis",
+      "goal": "Find hardest/easiest LOSO subjects and dominant confusions.",
+      "status_in_this_runner": "implemented: subject_failure_analysis.csv is written per job.",
+      "deliverables": [
+        "subject_failure_analysis.csv",
+        "confusion_matrix.csv/png"
+      ]
+    },
+    "exp6_few_shot_calibration": {
+      "title": "Few-Shot Subject Calibration",
+      "goal": "Fine-tune with 1/5/10 percent held-out-subject calibration data.",
+      "status_in_this_runner": "metadata only: saved fold checkpoints enable future fine-tuning experiments.",
+      "deliverables": [
+        "fold checkpoints"
+      ]
+    },
+    "exp7_health_group_analysis": {
+      "title": "Health-Relevant Activity Group Analysis",
+      "goal": "Map labels to clinically meaningful activity groups and report group-level metrics.",
+      "status_in_this_runner": "metadata only: predictions.csv can be remapped later for group metrics.",
+      "deliverables": [
+        "predictions.csv"
+      ]
+    }
+  },
+  "created_at": "20260706_013336",
+  "repo_root": "C:\\Users\\Dhruv\\HAR\\GNN_LSTM"
+}

@@ -1,0 +1,18 @@
+{
+  "dataset": "pamap2",
+  "model": "gnn_attention_adj",
+  "eval_unit": "window",
+  "raw_window_shape": [
+    128,
+    19
+  ],
+  "n_nodes": 22,
+  "node_feat_dim": 23,
+  "n_classes": 12,
+  "total_params": 11376,
+  "trainable_params": 11376,
+  "non_trainable_params": 0,
+  "buffer_values": 742,
+  "parameter_size_mb_float32": 0.04339599609375,
+  "profile_method": "computed from instantiated torch module using sum(p.numel())"
+}
