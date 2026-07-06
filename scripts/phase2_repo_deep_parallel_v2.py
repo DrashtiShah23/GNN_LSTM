@@ -37,7 +37,7 @@ import numpy as np
 try:
     import torch
     import torch.nn as nn
-    from torch.utils.data import DataLoader
+    from torch.utils.data import DataLoader, Subset
 except Exception as exc:  # pragma: no cover
     raise SystemExit("PyTorch is required for Phase 2 deep-model experiments. Install torch first.") from exc
 
@@ -116,6 +116,8 @@ EXPERIMENT_CATALOG: Dict[str, Dict[str, Any]] = {
 DEFAULT_PROPOSED_CANDIDATES = [
     "improved_gnn_lstm",
     "improved_gnn_lstm_attn_adj",
+    "improved_gnn_lstm_res",
+    "improved_gnn_lstm_attn_adj_resbn",
     "gnn_lstm",
     "gnn_flatten_lstm",
     "gnn_learnable_adj",
@@ -126,7 +128,14 @@ DEFAULT_PROPOSED_CANDIDATES = [
 ]
 
 # Models which consume graph sequence datasets.
-SEQUENCE_MODELS = {"gnn_lstm", "improved_gnn_lstm", "improved_gnn_lstm_attn_adj", "gnn_flatten_lstm"}
+SEQUENCE_MODELS = {
+    "gnn_lstm",
+    "improved_gnn_lstm",
+    "improved_gnn_lstm_attn_adj",
+    "improved_gnn_lstm_res",
+    "improved_gnn_lstm_attn_adj_resbn",
+    "gnn_flatten_lstm",
+}
 GRAPH_MODELS = {"gnn", "gnn_learnable_adj", "gnn_attention_adj"}
 WINDOW_MODELS = {"cnn", "lstm"}
 DEFAULT_EXPERIMENTS = (
@@ -167,10 +176,17 @@ class JobSpec:
     model: str
     run_root: str
     processed_dir: Optional[str]
+    variant_name: str
     eval_protocol: str
     epochs: int
     patience: int
     batch_size: int
+    lr: float
+    optimizer: str
+    weight_decay: float
+    standardize_input: bool
+    class_balanced_loss: bool
+    label_smoothing: float
     max_windows_per_subject: Optional[int]
     no_hhar_cap: bool
     max_windows_per_subject_arg: int
@@ -327,6 +343,60 @@ def processed_context(data_manifest: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def fit_channel_standardizer(X_train: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Fit train-only channel standardization over all windows/timesteps."""
+    if X_train.ndim != 3:
+        raise ValueError(f"Expected X_train shape (windows, timesteps, channels), got {X_train.shape}")
+    flat = X_train.reshape(-1, X_train.shape[-1]).astype(np.float64)
+    mean = flat.mean(axis=0)
+    std = flat.std(axis=0)
+    std = np.where(std < 1e-8, 1.0, std)
+    return mean.astype(np.float32), std.astype(np.float32)
+
+
+def apply_channel_standardizer(X: np.ndarray, mean: np.ndarray, std: np.ndarray) -> np.ndarray:
+    return ((X.astype(np.float32) - mean.reshape(1, 1, -1)) / std.reshape(1, 1, -1)).astype(np.float32)
+
+
+def class_weights_from_labels(y_train: np.ndarray, n_classes: int) -> torch.Tensor:
+    """Inverse-sqrt class weights normalized to mean 1 over present classes."""
+    y_int = np.asarray(y_train, dtype=np.int64)
+    counts = np.bincount(y_int, minlength=int(n_classes)).astype(np.float64)
+    weights = np.zeros(int(n_classes), dtype=np.float32)
+    present = counts > 0
+    weights[present] = 1.0 / np.sqrt(counts[present])
+    if present.any():
+        weights[present] = weights[present] / weights[present].mean()
+    return torch.tensor(weights, dtype=torch.float32)
+
+
+def labels_from_dataset_for_weights(ds: Any) -> np.ndarray:
+    """Return labels for class weighting from plain datasets or Subset wrappers."""
+    if isinstance(ds, Subset):
+        base = ds.dataset
+        idx = np.asarray(ds.indices, dtype=np.int64)
+        if hasattr(base, "labels"):
+            labels = getattr(base, "labels")
+        elif hasattr(base, "y"):
+            labels = getattr(base, "y")
+        else:
+            return np.asarray([], dtype=np.int64)
+        if torch.is_tensor(labels):
+            labels_np = labels.detach().cpu().numpy()
+        else:
+            labels_np = np.asarray(labels)
+        return labels_np[idx].astype(np.int64)
+    if hasattr(ds, "labels"):
+        labels = getattr(ds, "labels")
+    elif hasattr(ds, "y"):
+        labels = getattr(ds, "y")
+    else:
+        return np.asarray([], dtype=np.int64)
+    if torch.is_tensor(labels):
+        return labels.detach().cpu().numpy().astype(np.int64)
+    return np.asarray(labels, dtype=np.int64)
+
+
 def get_dataset_meta(dataset: str, X_sample: Optional[np.ndarray] = None) -> Tuple[int, int, Any]:
     add_repo_to_path()
     from src.config import HHAR_NODE_FEAT_DIM
@@ -353,6 +423,8 @@ def import_model_classes() -> Dict[str, Any]:
         "gnn_lstm": "GNNLSTMModel",
         "improved_gnn_lstm": "ImprovedGNNLSTMModel",
         "improved_gnn_lstm_attn_adj": "ImprovedGNNLSTMAttnAdj",
+        "improved_gnn_lstm_res": "ImprovedGNNLSTMResModel",
+        "improved_gnn_lstm_attn_adj_resbn": "ImprovedGNNLSTMAttnAdjResBN",
         "gnn_flatten_lstm": "GNNFlattenLSTMModel",
         "gnn_learnable_adj": "GNNLearnableAdjModel",
         "gnn_attention_adj": "GNNAttentionAdjModel",
@@ -505,13 +577,13 @@ def build_model(model_name: str, dataset: str, X_sample: np.ndarray, n_classes: 
         if sample_window.ndim != 2:
             raise ValueError(f"CNN1DModel expects a single raw window sample with shape (timesteps, channels); got {sample_window.shape}")
         model = cls(n_timesteps=int(sample_window.shape[0]), n_channels=int(sample_window.shape[1]), n_classes=n_classes)
-    elif model_name in {"gnn", "gnn_lstm", "improved_gnn_lstm", "gnn_flatten_lstm"}:
+    elif model_name in {"gnn", "gnn_lstm", "improved_gnn_lstm", "improved_gnn_lstm_res", "gnn_flatten_lstm"}:
         model = cls(node_feat_dim=node_feat_dim, n_nodes=n_nodes, n_classes=n_classes)
     elif model_name in {"gnn_learnable_adj", "gnn_attention_adj"}:
         if adj_fixed is None:
             raise ValueError("init_adj required")
         model = cls(node_feat_dim=node_feat_dim, n_nodes=n_nodes, n_classes=n_classes, init_adj=adj_fixed.detach().cpu())
-    elif model_name == "improved_gnn_lstm_attn_adj":
+    elif model_name in {"improved_gnn_lstm_attn_adj", "improved_gnn_lstm_attn_adj_resbn"}:
         if adj_fixed is None:
             raise ValueError("init_adj required")
         model = cls(node_feat_dim=node_feat_dim, n_nodes=n_nodes, n_classes=n_classes, init_adj=adj_fixed.detach().cpu())
@@ -575,9 +647,21 @@ def train_one_fold(
     n_classes: int,
     early_stop_metric: str,
     early_stop_mode: str,
+    *,
+    lr: float,
+    weight_decay: float,
+    class_weights: Optional[torch.Tensor] = None,
+    label_smoothing: float = 0.0,
+    optimizer_name: str = "adam",
 ) -> Tuple[nn.Module, Dict[str, List[float]], Dict[str, Any], Dict[str, torch.Tensor]]:
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
+    criterion = nn.CrossEntropyLoss(
+        weight=class_weights.to(device) if class_weights is not None else None,
+        label_smoothing=float(label_smoothing),
+    )
+    if optimizer_name == "adamw":
+        optimizer = torch.optim.AdamW(model.parameters(), lr=float(lr), weight_decay=float(weight_decay))
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr=float(lr), weight_decay=float(weight_decay))
     try:
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5, factor=0.5)
     except TypeError:
@@ -1050,6 +1134,7 @@ def worker_run(spec: JobSpec) -> int:
     safe_json_dump({
         "dataset": dataset,
         **proc_ctx,
+        "variant_name": spec.variant_name,
         "model": model_name,
         "eval_unit": eval_unit,
         "eval_protocol": eval_protocol,
@@ -1069,6 +1154,12 @@ def worker_run(spec: JobSpec) -> int:
         "val_subject_policy": spec.val_subject_policy,
         "early_stop_metric": spec.early_stop_metric,
         "early_stop_mode": resolve_early_stop_mode(spec.early_stop_metric, spec.early_stop_mode),
+        "standardize_input": bool(spec.standardize_input),
+        "class_balanced_loss": bool(spec.class_balanced_loss),
+        "label_smoothing": float(spec.label_smoothing),
+        "lr": float(spec.lr),
+        "optimizer": spec.optimizer,
+        "weight_decay": float(spec.weight_decay),
         "shape_X": list(X.shape),
         "n_classes": n_classes,
         "n_subjects": int(len(np.unique(subjects))),
@@ -1118,6 +1209,11 @@ def worker_run(spec: JobSpec) -> int:
                 X, y, subjects, source_indices, test_subj, fold_i,
                 spec.val_strategy, spec.val_subject_policy, spec.seed,
             )
+            if spec.standardize_input:
+                scaler_mean, scaler_std = fit_channel_standardizer(X_tr)
+                X_tr = apply_channel_standardizer(X_tr, scaler_mean, scaler_std)
+                X_val = apply_channel_standardizer(X_val, scaler_mean, scaler_std)
+                X_te = apply_channel_standardizer(X_te, scaler_mean, scaler_std)
             tr_ds, val_ds, te_ds, use_adj, ds_meta = make_datasets(
                 model_name, eval_unit,
                 X_tr, y_tr, s_tr, src_tr,
@@ -1146,6 +1242,15 @@ def worker_run(spec: JobSpec) -> int:
                 seq_train_idx, seq_val_idx, seq_test_idx = random_train_val_test_indices(
                     len(full_ds), seed=spec.seed + fold_i
                 )
+                if spec.standardize_input:
+                    train_target_local = np.asarray([int(full_ds._seq_indices[int(i)][-1]) for i in seq_train_idx], dtype=np.int64)
+                    scaler_mean, scaler_std = fit_channel_standardizer(X[train_target_local])
+                    X_for_sequence = apply_channel_standardizer(X, scaler_mean, scaler_std)
+                    full_ds = HARSequenceDataset(
+                        X_for_sequence, y, subjects=subjects, dataset=dataset, seq_len=spec.sequence_length,
+                        seq_stride=spec.sequence_stride, target_policy=spec.sequence_target_policy,
+                        source_indices=source_indices,
+                    )
                 tr_ds = Subset(full_ds, seq_train_idx.tolist())
                 val_ds = Subset(full_ds, seq_val_idx.tolist())
                 te_ds = Subset(full_ds, seq_test_idx.tolist())
@@ -1183,6 +1288,11 @@ def worker_run(spec: JobSpec) -> int:
                 X_tr, y_tr, s_tr, src_tr = X[train_idx], y[train_idx], subjects[train_idx], source_indices[train_idx]
                 X_val, y_val, s_val, src_val = X[val_idx], y[val_idx], subjects[val_idx], source_indices[val_idx]
                 X_te, y_te, s_te, src_te = X[test_indices], y[test_indices], subjects[test_indices], source_indices[test_indices]
+                if spec.standardize_input:
+                    scaler_mean, scaler_std = fit_channel_standardizer(X_tr)
+                    X_tr = apply_channel_standardizer(X_tr, scaler_mean, scaler_std)
+                    X_val = apply_channel_standardizer(X_val, scaler_mean, scaler_std)
+                    X_te = apply_channel_standardizer(X_te, scaler_mean, scaler_std)
                 tr_ds, val_ds, te_ds, use_adj, ds_meta = make_datasets(
                     model_name, eval_unit,
                     X_tr, y_tr, s_tr, src_tr,
@@ -1202,9 +1312,16 @@ def worker_run(spec: JobSpec) -> int:
         te_loader = DataLoader(te_ds, batch_size=spec.batch_size, shuffle=False, num_workers=spec.num_workers, pin_memory=(device.type == "cuda"))
 
         model = build_model(model_name, dataset, X_tr, n_classes, device, adj_fixed)
+        weight_labels = labels_from_dataset_for_weights(tr_ds)
+        class_weights = class_weights_from_labels(weight_labels, n_classes) if spec.class_balanced_loss and len(weight_labels) else None
         model, history, train_meta, last_state = train_one_fold(
             model, tr_loader, val_loader, use_adj, device, spec.epochs, spec.patience,
             n_classes, spec.early_stop_metric, spec.early_stop_mode,
+            lr=spec.lr,
+            optimizer_name=spec.optimizer,
+            weight_decay=spec.weight_decay,
+            class_weights=class_weights,
+            label_smoothing=spec.label_smoothing,
         )
         best_payload = {
             "model_state_dict": model.state_dict(),
@@ -1242,6 +1359,7 @@ def worker_run(spec: JobSpec) -> int:
             "window_type": proc_ctx["window_type"],
             "task": proc_ctx["task"],
             "sessions": proc_ctx["sessions"],
+            "variant_name": spec.variant_name,
             "model": model_name,
             "eval_unit": eval_unit,
             "fold": fold_i,
@@ -1273,6 +1391,7 @@ def worker_run(spec: JobSpec) -> int:
             "window_type": proc_ctx["window_type"],
             "task": proc_ctx["task"],
             "sessions": proc_ctx["sessions"],
+            "variant_name": spec.variant_name,
             "eval_protocol": eval_protocol,
             "model": model_name,
             "eval_unit": eval_unit,
@@ -1293,6 +1412,12 @@ def worker_run(spec: JobSpec) -> int:
             "trainable_params": model_profile["trainable_params"],
             "non_trainable_params": model_profile["non_trainable_params"],
             "parameter_size_mb_float32": model_profile["parameter_size_mb_float32"],
+            "standardize_input": bool(spec.standardize_input),
+            "class_balanced_loss": bool(spec.class_balanced_loss),
+            "label_smoothing": float(spec.label_smoothing),
+            "lr": float(spec.lr),
+            "optimizer": spec.optimizer,
+            "weight_decay": float(spec.weight_decay),
             **m,
         })
         fold_split_rows.append({
@@ -1301,6 +1426,7 @@ def worker_run(spec: JobSpec) -> int:
             "window_type": proc_ctx["window_type"],
             "task": proc_ctx["task"],
             "sessions": proc_ctx["sessions"],
+            "variant_name": spec.variant_name,
             "eval_protocol": eval_protocol,
             "model": model_name,
             "eval_unit": eval_unit,
@@ -1341,6 +1467,7 @@ def worker_run(spec: JobSpec) -> int:
         "task": proc_ctx["task"],
         "sessions": proc_ctx["sessions"],
         "processed_dataset_dir": proc_ctx["processed_dataset_dir"],
+        "variant_name": spec.variant_name,
         "eval_protocol": eval_protocol,
         "model": model_name,
         "eval_unit": eval_unit,
@@ -1354,6 +1481,12 @@ def worker_run(spec: JobSpec) -> int:
         "parameter_size_mb_float32": model_profile["parameter_size_mb_float32"],
         "n_nodes": model_profile["n_nodes"],
         "node_feat_dim": model_profile["node_feat_dim"],
+        "standardize_input": bool(spec.standardize_input),
+        "class_balanced_loss": bool(spec.class_balanced_loss),
+        "label_smoothing": float(spec.label_smoothing),
+        "lr": float(spec.lr),
+        "optimizer": spec.optimizer,
+        "weight_decay": float(spec.weight_decay),
         **agg,
         "subject_macro_accuracy_mean": float(fold_df["accuracy"].mean()) if not fold_df.empty else math.nan,
         "subject_macro_accuracy_std": float(fold_df["accuracy"].std(ddof=1)) if len(fold_df) > 1 else 0.0,
@@ -1553,6 +1686,7 @@ def launch_jobs(specs: List[JobSpec], parallel_jobs: int, extra_env: Dict[str, s
             "--model", spec.model,
             "--eval-unit", spec.eval_unit,
             "--run-root", spec.run_root,
+            "--variant-name", spec.variant_name,
             "--eval-protocol", spec.eval_protocol,
             *(
                 ["--processed-dir", spec.processed_dir]
@@ -1562,6 +1696,9 @@ def launch_jobs(specs: List[JobSpec], parallel_jobs: int, extra_env: Dict[str, s
             "--epochs", str(spec.epochs),
             "--patience", str(spec.patience),
             "--batch-size", str(spec.batch_size),
+            "--lr", str(spec.lr),
+            "--optimizer", spec.optimizer,
+            "--weight-decay", str(spec.weight_decay),
             "--device", spec.device,
             "--num-workers", str(spec.num_workers),
             "--seed", str(spec.seed),
@@ -1582,6 +1719,12 @@ def launch_jobs(specs: List[JobSpec], parallel_jobs: int, extra_env: Dict[str, s
             cmd += ["--max-windows-per-subject", str(spec.max_windows_per_subject)]
         if spec.apply_window_cap_to_all_datasets:
             cmd += ["--apply-window-cap-to-all-datasets"]
+        if spec.standardize_input:
+            cmd += ["--standardize-input"]
+        if spec.class_balanced_loss:
+            cmd += ["--class-balanced-loss"]
+        if float(spec.label_smoothing) > 0:
+            cmd += ["--label-smoothing", str(spec.label_smoothing)]
         if spec.skip_existing:
             cmd += ["--skip-existing"]
         env = os.environ.copy()
@@ -1695,10 +1838,17 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--rank-metric", default="macro_f1")
     p.add_argument("--run-root", default=None, help="Output root. Launcher creates timestamped one if omitted.")
     p.add_argument("--processed-dir", default=None, help="Directory containing {dataset}_X/y/subjects.npy files.")
+    p.add_argument("--variant-name", default="v1", help="Variant label written into summaries, e.g. v2_norm_balanced.")
     p.add_argument("--parallel-jobs", type=int, default=2, help="Max concurrent dataset/model jobs.")
     p.add_argument("--epochs", type=int, default=30)
     p.add_argument("--patience", type=int, default=8)
     p.add_argument("--batch-size", type=int, default=128)
+    p.add_argument("--lr", type=float, default=1e-3)
+    p.add_argument("--optimizer", choices=["adam", "adamw"], default="adam")
+    p.add_argument("--weight-decay", type=float, default=0.0)
+    p.add_argument("--standardize-input", action="store_true", help="Fit channel mean/std on train split only and apply to val/test.")
+    p.add_argument("--class-balanced-loss", action="store_true", help="Use inverse-sqrt class weights from the training dataset labels.")
+    p.add_argument("--label-smoothing", type=float, default=0.0)
     p.add_argument("--max-windows-per-subject", type=int, default=5000, help="HHAR cap per subject; ignored for PAMAP2.")
     p.add_argument("--apply-window-cap-to-all-datasets", action="store_true", help="Apply --max-windows-per-subject to PAMAP2 too; intended for smoke/debug runs only.")
     p.add_argument("--no-hhar-cap", action="store_true", help="Use full HHAR processed data.")
@@ -1734,10 +1884,17 @@ def main() -> int:
             model=args.model,
             run_root=str(args.run_root),
             processed_dir=args.processed_dir,
+            variant_name=args.variant_name,
             eval_protocol=args.eval_protocol,
             epochs=args.epochs,
             patience=args.patience,
             batch_size=args.batch_size,
+            lr=args.lr,
+            optimizer=args.optimizer,
+            weight_decay=args.weight_decay,
+            standardize_input=bool(args.standardize_input),
+            class_balanced_loss=bool(args.class_balanced_loss),
+            label_smoothing=float(args.label_smoothing),
             max_windows_per_subject=effective_hhar_cap,
             no_hhar_cap=bool(args.no_hhar_cap),
             max_windows_per_subject_arg=int(args.max_windows_per_subject),
@@ -1783,10 +1940,17 @@ def main() -> int:
                     model=model,
                     run_root=str(run_root),
                     processed_dir=args.processed_dir,
+                    variant_name=args.variant_name,
                     eval_protocol=args.eval_protocol,
                     epochs=args.epochs,
                     patience=args.patience,
                     batch_size=args.batch_size,
+                    lr=args.lr,
+                    optimizer=args.optimizer,
+                    weight_decay=args.weight_decay,
+                    standardize_input=bool(args.standardize_input),
+                    class_balanced_loss=bool(args.class_balanced_loss),
+                    label_smoothing=float(args.label_smoothing),
                     max_windows_per_subject=None if args.no_hhar_cap else args.max_windows_per_subject,
                     no_hhar_cap=bool(args.no_hhar_cap),
                     max_windows_per_subject_arg=int(args.max_windows_per_subject),

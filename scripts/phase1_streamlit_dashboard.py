@@ -65,7 +65,9 @@ DEEP_MODELS = {
     "gnn_lstm",
     "gnn_flatten_lstm",
     "improved_gnn_lstm",
+    "improved_gnn_lstm_res",
     "improved_gnn_lstm_attn_adj",
+    "improved_gnn_lstm_attn_adj_resbn",
 }
 
 
@@ -198,7 +200,7 @@ def normalize_summary_file(path: Path, results_root: Path) -> pd.DataFrame:
     df.loc[df["model"].isin(BASELINE_MODELS), "family"] = "baseline"
     df.loc[df["model"].isin(DEEP_MODELS), "family"] = "deep"
 
-    for key in ["dataset", "feature_set", "window_type", "task", "sessions"]:
+    for key in ["dataset", "feature_set", "window_type", "task", "sessions", "variant_name"]:
         value = manifest.get(key) or job.get(key) or ctx.get(key, "")
         if key not in df.columns:
             df[key] = value
@@ -246,7 +248,7 @@ def normalize_fold_file(path: Path, results_root: Path) -> pd.DataFrame:
     df.loc[df["model"].isin(BASELINE_MODELS), "family"] = "baseline"
     df.loc[df["model"].isin(DEEP_MODELS), "family"] = "deep"
 
-    for key in ["dataset", "feature_set", "window_type", "task", "sessions"]:
+    for key in ["dataset", "feature_set", "window_type", "task", "sessions", "variant_name"]:
         value = manifest.get(key) or ctx.get(key, "")
         if key not in df.columns:
             df[key] = value
@@ -295,6 +297,24 @@ def filter_df(df: pd.DataFrame, filters: dict[str, list[str]]) -> pd.DataFrame:
     for col, values in filters.items():
         if values and col in out.columns:
             out = out[out[col].astype(str).isin(values)]
+    return out
+
+
+def normalize_variant_labels(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    out = df.copy()
+    if "variant_name" not in out.columns:
+        out["variant_name"] = ""
+    if "result_set" not in out.columns:
+        out["result_set"] = ""
+    variant = out["variant_name"].fillna("").astype(str)
+    result_set = out["result_set"].fillna("").astype(str)
+    missing = variant.str.strip().isin(["", "nan", "None"])
+    out.loc[missing & result_set.eq("canonical_protocol_only"), "variant_name"] = "v1_original"
+    out.loc[missing & result_set.eq("canonical_protocol_only_v2"), "variant_name"] = "v2_norm_balanced_ls005"
+    out.loc[missing & result_set.eq("canonical_protocol_only_v3"), "variant_name"] = "v3_residual_arch"
+    out["variant_name"] = out["variant_name"].fillna("").astype(str)
     return out
 
 
@@ -395,6 +415,15 @@ def render_matrix_csv(path: Path, normalize: bool) -> None:
     fig, ax = plt.subplots(figsize=(size, size))
     im = ax.imshow(values, aspect="auto")
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    max_value = float(np.nanmax(values)) if values.size else 0.0
+    threshold = max_value * 0.5
+    text_size = 8 if max(values.shape) <= 12 else 6
+    for i in range(values.shape[0]):
+        for j in range(values.shape[1]):
+            value = float(values[i, j])
+            label = f"{value:.2f}" if normalize else f"{int(round(value))}"
+            color = "white" if value > threshold else "black"
+            ax.text(j, i, label, ha="center", va="center", color=color, fontsize=text_size)
     ax.set_xticks(np.arange(len(df.columns)))
     ax.set_yticks(np.arange(len(df.index)))
     ax.set_xticklabels([str(c) for c in df.columns], rotation=90, fontsize=8)
@@ -454,10 +483,32 @@ if st.sidebar.button("Refresh"):
     st.rerun()
 
 summary_all, folds_all = load_results(str(results_root))
+summary_all = normalize_variant_labels(summary_all)
+folds_all = normalize_variant_labels(folds_all)
 
 if summary_all.empty:
     st.error(f"No metrics_summary.csv files found under {results_root}")
     st.stop()
+
+canonical_sets = [
+    s for s in ["canonical_protocol_only", "canonical_protocol_only_v2", "canonical_protocol_only_v3"]
+    if s in set(summary_all["result_set"].astype(str))
+]
+if st.sidebar.button("Show all canonical v1/v2/v3"):
+    for key in [
+        "filter_result_set",
+        "filter_dataset",
+        "filter_task",
+        "filter_sessions",
+        "filter_variant_name",
+        "filter_feature_set",
+        "filter_window_type",
+        "filter_protocol",
+        "filter_family",
+        "selected_models",
+    ]:
+        st.session_state.pop(key, None)
+    st.rerun()
 
 filters: dict[str, list[str]] = {}
 with st.sidebar:
@@ -467,19 +518,20 @@ with st.sidebar:
         ("dataset", "Dataset"),
         ("task", "Task"),
         ("sessions", "Sessions"),
+        ("variant_name", "Variant"),
         ("feature_set", "Feature set"),
         ("window_type", "Window"),
         ("protocol", "Protocol"),
         ("family", "Family"),
     ]:
         options = sorted_unique(summary_all, col)
-        if col == "result_set" and "canonical_protocol_only" in options:
-            default = ["canonical_protocol_only"]
+        if col == "result_set" and any(x.startswith("canonical_protocol_only") for x in options):
+            default = canonical_sets or [x for x in options if x.startswith("canonical_protocol_only")]
         elif col == "result_set":
             default = [x for x in options if "smoke" not in x.lower()] or options
         else:
             default = options
-        filters[col] = st.multiselect(label, options=options, default=default)
+        filters[col] = st.multiselect(label, options=options, default=default, key=f"filter_{col}")
 
 summary = filter_df(summary_all, filters)
 folds = filter_df(folds_all, filters)
@@ -488,11 +540,24 @@ metrics = metric_options(summary)
 metric = st.sidebar.selectbox("Primary metric", options=metrics, index=metrics.index("macro_f1") if "macro_f1" in metrics else 0)
 
 model_options = sorted_unique(summary, "model")
-selected_models = st.sidebar.multiselect("Models", options=model_options, default=model_options)
+selected_models = st.sidebar.multiselect("Models", options=model_options, default=model_options, key="selected_models")
 if selected_models:
     summary = summary[summary["model"].astype(str).isin(selected_models)]
     if not folds.empty and "model" in folds.columns:
         folds = folds[folds["model"].astype(str).isin(selected_models)]
+
+expected_canonical = ["canonical_protocol_only", "canonical_protocol_only_v2", "canonical_protocol_only_v3"]
+loaded_canonical = [s for s in expected_canonical if s in set(summary_all["result_set"].astype(str))]
+visible_canonical = [s for s in expected_canonical if s in set(summary["result_set"].astype(str))]
+if loaded_canonical:
+    st.sidebar.caption("Loaded canonical: " + ", ".join(loaded_canonical))
+missing_visible = [s for s in loaded_canonical if s not in visible_canonical]
+if missing_visible:
+    st.warning(
+        "Some loaded canonical result sets are hidden by the current filters: "
+        + ", ".join(missing_visible)
+        + ". Use the sidebar button 'Show all canonical v1/v2/v3' to reset."
+    )
 
 tabs = st.tabs([
     "Overview",
@@ -512,7 +577,7 @@ with tabs[0]:
     c5.metric("Protocols", summary["protocol"].nunique() if "protocol" in summary else 0)
 
     st.subheader("Coverage")
-    coverage_cols = ["result_set", "dataset", "task", "sessions", "feature_set", "protocol", "family"]
+    coverage_cols = ["result_set", "dataset", "task", "sessions", "variant_name", "feature_set", "protocol", "family"]
     coverage = summary.groupby([c for c in coverage_cols if c in summary.columns], dropna=False).agg(
         models=("model", "nunique"),
         rows=("model", "size"),
@@ -521,7 +586,7 @@ with tabs[0]:
 
     st.subheader("Top results")
     show_cols = [
-        "result_set", "dataset", "task", "sessions", "feature_set", "protocol",
+        "result_set", "dataset", "task", "sessions", "variant_name", "feature_set", "protocol",
         "family", "model", "eval_unit", "total_params", "accuracy",
         "balanced_accuracy", "macro_f1", "artifact_dir",
     ]
@@ -592,7 +657,7 @@ with tabs[3]:
         st.dataframe(format_metrics(holdout.sort_values(["feature_set", metric], ascending=[True, False])), width="stretch")
 
     if not holdout.empty and not loso.empty:
-        key_cols = ["result_set", "dataset", "task", "sessions", "feature_set", "window_type", "family", "model", "eval_unit"]
+        key_cols = ["result_set", "dataset", "task", "sessions", "variant_name", "feature_set", "window_type", "family", "model", "eval_unit"]
         key_cols = [c for c in key_cols if c in summary.columns]
         h = holdout[key_cols + [metric]].rename(columns={metric: "random_holdout"})
         l = loso[key_cols + [metric]].rename(columns={metric: "loso"})
@@ -610,7 +675,7 @@ with tabs[4]:
         st.info("No rows for selected model.")
     else:
         bar_chart(detail.sort_values(["protocol", "feature_set"]), "feature_set", metric, color="protocol", title=f"{selected_model}: {metric}")
-        cols = ["result_set", "dataset", "task", "sessions", "feature_set", "protocol", "family", "eval_unit", "total_params", "accuracy", "balanced_accuracy", "macro_f1"]
+        cols = ["result_set", "dataset", "task", "sessions", "variant_name", "feature_set", "protocol", "family", "eval_unit", "total_params", "accuracy", "balanced_accuracy", "macro_f1"]
         cols = [c for c in cols if c in detail.columns]
         st.dataframe(format_metrics(detail.sort_values(["feature_set", "protocol"])[cols]), width="stretch")
 
@@ -622,7 +687,7 @@ with tabs[4]:
 
 with tabs[5]:
     st.subheader("Artifact browser")
-    select_cols = ["result_set", "feature_set", "protocol", "family", "model", "eval_unit", metric]
+    select_cols = ["result_set", "variant_name", "feature_set", "protocol", "family", "model", "eval_unit", metric]
     select_cols = [c for c in select_cols if c in summary.columns]
     artifact_table = summary.sort_values(metric, ascending=False).reset_index(drop=True)
     labels = [

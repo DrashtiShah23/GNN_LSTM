@@ -1,0 +1,7 @@
+dataset,model,eval_unit,metric,folds,mean,std,ci95_half_width,ci95_low,ci95_high
+pamap2,improved_gnn_lstm_attn_adj_resbn,sequence,accuracy,1,0.9908698539176628,0.0,0.0,0.9908698539176628,0.9908698539176628
+pamap2,improved_gnn_lstm_attn_adj_resbn,sequence,macro_f1,1,0.9906265099692052,0.0,0.0,0.9906265099692052,0.9906265099692052
+pamap2,improved_gnn_lstm_attn_adj_resbn,sequence,balanced_accuracy,1,0.990972548907375,0.0,0.0,0.990972548907375,0.990972548907375
+pamap2,improved_gnn_lstm_res,sequence,accuracy,1,0.9897078353253652,0.0,0.0,0.9897078353253652,0.9897078353253652
+pamap2,improved_gnn_lstm_res,sequence,macro_f1,1,0.9896403121037228,0.0,0.0,0.9896403121037228,0.9896403121037228
+pamap2,improved_gnn_lstm_res,sequence,balanced_accuracy,1,0.9894988472428656,0.0,0.0,0.9894988472428656,0.9894988472428656

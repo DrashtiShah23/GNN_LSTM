@@ -26,8 +26,8 @@ PAMAP2_ACTIVITIES = {
     5: "running", 6: "cycling", 7: "nordic_walking",
     9: "watching_TV", 10: "computer_work", 11: "car_driving",
     12: "ascending_stairs", 13: "descending_stairs",
-    14: "vacuum_cleaning", 15: "ironing", 16: "folding_laundry",
-    17: "house_cleaning", 18: "playing_soccer", 24: "rope_jumping",
+    16: "vacuum_cleaning", 17: "ironing", 18: "folding_laundry",
+    19: "house_cleaning", 20: "playing_soccer", 24: "rope_jumping",
 }
 PAMAP2_POSITIONS = ["wrist", "chest", "ankle"]  # IMU positions
 PAMAP2_SENSOR_COLS = 40  # columns per subject file (after timestamp)

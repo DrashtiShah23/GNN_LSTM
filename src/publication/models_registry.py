@@ -9,13 +9,14 @@ import torch.nn as nn
 from src.config import (
     GCN_OUTPUT_DIM,
     HHAR_NODE_FEAT_DIM,
-    PAMAP2_NODE_FEAT_DIM,
     LSTM_HIDDEN_DIM,
     LSTM_NUM_LAYERS,
     DROPOUT,
     MLP_HIDDEN_DIM,
 )
-from src.graph_construction import build_hhar_adj, build_pamap2_adj
+import numpy as np
+
+from src.graph_construction import build_hhar_adj, build_pamap2_adj, window_to_node_features_pamap2
 from src.models import CNN1DModel, GNNFlattenLSTMModel, ImprovedGNNLSTMModel
 
 
@@ -33,8 +34,14 @@ def get_model_factory(
     model_type: 'window' | 'sequence'
     """
     T, C = input_shape[0], input_shape[1]
-    node_feat = PAMAP2_NODE_FEAT_DIM if dataset == "pamap2" else HHAR_NODE_FEAT_DIM
-    n_nodes = 3
+    if dataset == "pamap2":
+        sample = np.zeros((T, C), dtype=np.float32)
+        sample_nodes = window_to_node_features_pamap2(sample)
+        n_nodes = int(sample_nodes.shape[0])
+        node_feat = int(sample_nodes.shape[-1])
+    else:
+        n_nodes = 3
+        node_feat = HHAR_NODE_FEAT_DIM
 
     if model_name == "CNN1D":
         def factory():
@@ -58,5 +65,5 @@ def get_model_factory(
     raise ValueError(f"Unknown model: {model_name}")
 
 
-def build_adj(dataset: str):
-    return build_pamap2_adj() if dataset == "pamap2" else build_hhar_adj()
+def build_adj(dataset: str, n_channels: int | None = None):
+    return build_pamap2_adj(n_channels) if dataset == "pamap2" else build_hhar_adj()

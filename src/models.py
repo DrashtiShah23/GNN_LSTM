@@ -635,6 +635,207 @@ class ImprovedGNNLSTMAttnAdj(nn.Module):
 
 # ── GNN with attention-style adaptive adjacency (skeleton × learned gate) ─────
 
+class _ResidualGraphBlock(nn.Module):
+    """Residual graph message-passing block used by v3 improved models."""
+
+    def __init__(
+        self,
+        in_dim: int,
+        out_dim: int,
+        *,
+        dropout: float,
+        norm_kind: str = "layer",
+    ):
+        super().__init__()
+        self.linear = nn.Linear(in_dim, out_dim)
+        self.skip = nn.Identity() if in_dim == out_dim else nn.Linear(in_dim, out_dim)
+        self.dropout = nn.Dropout(dropout)
+        self.norm_kind = norm_kind
+        if norm_kind == "batch":
+            self.norm = nn.BatchNorm1d(out_dim)
+        elif norm_kind == "layer":
+            self.norm = nn.LayerNorm(out_dim)
+        else:
+            raise ValueError("norm_kind must be 'layer' or 'batch'")
+
+    def _norm(self, h: Tensor) -> Tensor:
+        if self.norm_kind == "batch":
+            b, n, f = h.shape
+            return self.norm(h.reshape(b * n, f)).reshape(b, n, f)
+        return self.norm(h)
+
+    def forward(self, x: Tensor, adj: Tensor) -> Tensor:
+        if adj.dim() == 3:
+            adj = adj[0]
+        adj_b = adj.unsqueeze(0).expand(x.size(0), -1, -1)
+        h = torch.bmm(adj_b, x)
+        h = self.linear(h)
+        h = self._norm(h)
+        h = F.relu(h)
+        h = self.dropout(h)
+        return F.relu(h + self.skip(x))
+
+
+class _ProjectedSequenceBlock(nn.Module):
+    """Two-layer projection block over per-window graph embeddings."""
+
+    def __init__(self, in_dim: int, hidden_dim: int, *, dropout: float, norm_kind: str):
+        super().__init__()
+        self.fc1 = nn.Linear(in_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        if norm_kind == "batch":
+            self.norm1 = nn.BatchNorm1d(hidden_dim)
+            self.norm2 = nn.BatchNorm1d(hidden_dim)
+        elif norm_kind == "layer":
+            self.norm1 = nn.LayerNorm(hidden_dim)
+            self.norm2 = nn.LayerNorm(hidden_dim)
+        else:
+            raise ValueError("norm_kind must be 'layer' or 'batch'")
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: Tensor) -> Tensor:
+        h = self.fc1(x)
+        h = self.norm1(h)
+        h = F.relu(h)
+        h = self.dropout(h)
+        h2 = self.fc2(h)
+        h2 = self.norm2(h2)
+        h2 = F.relu(h2)
+        return self.dropout(h + h2)
+
+
+class _ResidualGNNLSTMBase(nn.Module):
+    """
+    Deeper residual GNN + BiLSTM base for v3 experiments.
+
+    Input remains a true sequence of graph windows:
+      (batch, seq_len, n_nodes, node_feat_dim)
+    """
+
+    def __init__(
+        self,
+        node_feat_dim: int,
+        n_nodes: int,
+        n_classes: int,
+        *,
+        init_adj: Tensor | None = None,
+        norm_kind: str = "layer",
+        gcn_hidden: int = 192,
+        gcn_output: int = 192,
+        graph_blocks: int = 3,
+        proj_dim: int = 384,
+        lstm_hidden: int = 384,
+        lstm_layers: int = 3,
+        classifier_hidden: int | None = None,
+        dropout: float = 0.25,
+    ):
+        super().__init__()
+        if graph_blocks < 2:
+            raise ValueError("graph_blocks must be >= 2")
+        self.n_nodes = n_nodes
+        self.node_feat_dim = node_feat_dim
+        self.gcn_output = gcn_output
+        self.uses_attention_adj = init_adj is not None
+
+        if init_adj is not None:
+            self.register_buffer("skeleton", init_adj.clone())
+            self.edge_gate = nn.Parameter(torch.zeros(n_nodes, n_nodes))
+
+        blocks: list[nn.Module] = [
+            _ResidualGraphBlock(node_feat_dim, gcn_hidden, dropout=dropout, norm_kind=norm_kind)
+        ]
+        for _ in range(max(0, graph_blocks - 2)):
+            blocks.append(_ResidualGraphBlock(gcn_hidden, gcn_hidden, dropout=dropout, norm_kind=norm_kind))
+        blocks.append(_ResidualGraphBlock(gcn_hidden, gcn_output, dropout=dropout, norm_kind=norm_kind))
+        self.graph_blocks = nn.ModuleList(blocks)
+
+        fused_dim = n_nodes * gcn_output + n_nodes * node_feat_dim
+        self.proj = _ProjectedSequenceBlock(fused_dim, proj_dim, dropout=dropout, norm_kind=norm_kind)
+
+        self.lstm = nn.LSTM(
+            input_size=proj_dim,
+            hidden_size=lstm_hidden,
+            num_layers=lstm_layers,
+            batch_first=True,
+            bidirectional=True,
+            dropout=dropout if lstm_layers > 1 else 0.0,
+        )
+        lstm_out_dim = lstm_hidden * 2
+        cls_hidden = int(classifier_hidden or (MLP_HIDDEN_DIM * 2))
+        self.lstm_norm = nn.LayerNorm(lstm_out_dim)
+        self.temporal_attn = nn.Sequential(
+            nn.Linear(lstm_out_dim, lstm_out_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(lstm_out_dim // 2, 1),
+        )
+        self.classifier = nn.Sequential(
+            nn.Linear(lstm_out_dim, cls_hidden),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(cls_hidden, n_classes),
+        )
+
+    def _effective_adj(self, adj: Tensor) -> Tensor:
+        if not self.uses_attention_adj:
+            return adj[0] if adj.dim() == 3 else adj
+        g = torch.sigmoid((self.edge_gate + self.edge_gate.T) * 0.5)
+        a = self.skeleton * g
+        row_sum = a.sum(dim=1, keepdim=True).clamp(min=1e-8)
+        return a / row_sum
+
+    def _gcn(self, x: Tensor, adj: Tensor) -> Tensor:
+        h = x
+        for block in self.graph_blocks:
+            h = block(h, adj)
+        return h
+
+    def forward(self, x_seq: Tensor, adj: Tensor) -> Tensor:
+        B, T, N, F_dim = x_seq.shape
+        eff_adj = self._effective_adj(adj)
+
+        x_flat = x_seq.reshape(B * T, N, F_dim)
+        gcn_out = self._gcn(x_flat, eff_adj)
+        gcn_cat = gcn_out.reshape(B * T, N * self.gcn_output)
+        raw_flat = x_flat.reshape(B * T, N * F_dim)
+
+        proj = self.proj(torch.cat([gcn_cat, raw_flat], dim=-1))
+        proj_seq = proj.reshape(B, T, -1)
+
+        lstm_out, _ = self.lstm(proj_seq)
+        lstm_out = self.lstm_norm(lstm_out)
+        attn_w = F.softmax(self.temporal_attn(lstm_out).squeeze(-1), dim=-1)
+        context = (lstm_out * attn_w.unsqueeze(-1)).sum(dim=1)
+        return self.classifier(context)
+
+
+class ImprovedGNNLSTMResModel(_ResidualGNNLSTMBase):
+    """v3 fixed-adjacency residual GNN + deeper BiLSTM sequence model."""
+
+    def __init__(self, node_feat_dim: int, n_nodes: int, n_classes: int, **kwargs):
+        super().__init__(
+            node_feat_dim=node_feat_dim,
+            n_nodes=n_nodes,
+            n_classes=n_classes,
+            norm_kind="layer",
+            **kwargs,
+        )
+
+
+class ImprovedGNNLSTMAttnAdjResBN(_ResidualGNNLSTMBase):
+    """v3 attention-adjacency residual GNN + BatchNorm graph/projection model."""
+
+    def __init__(self, node_feat_dim: int, n_nodes: int, n_classes: int, init_adj: Tensor, **kwargs):
+        super().__init__(
+            node_feat_dim=node_feat_dim,
+            n_nodes=n_nodes,
+            n_classes=n_classes,
+            init_adj=init_adj,
+            norm_kind="batch",
+            **kwargs,
+        )
+
+
 class GNNAttentionAdjModel(nn.Module):
     """
     GNN-only where a fixed topology is multiplied by a learned symmetric gate

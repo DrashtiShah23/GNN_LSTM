@@ -97,7 +97,7 @@ class HARGraphDataset(Dataset):
 
         if self.dataset == "pamap2":
             self._node_fn = window_to_node_features_pamap2
-            self.adj = build_pamap2_adj()
+            self.adj = build_pamap2_adj(int(X.shape[2]))
         else:
             self._node_fn = window_to_node_features_hhar
             self.adj = build_hhar_adj()
@@ -163,15 +163,32 @@ class HARSequenceDataset(Dataset):
         subjects: np.ndarray | None = None,
         dataset: str = "pamap2",
         seq_len: int = 10,
+        seq_stride: int = 1,
+        target_policy: str = "last",
+        source_indices: np.ndarray | None = None,
         cache: Union[bool, int] = True,
     ):
         self.X_raw   = X                                   # (N, T, C)
-        self.seq_len = seq_len
+        self.seq_len = int(seq_len)
+        self.seq_stride = int(seq_stride)
+        if self.seq_len <= 0:
+            raise ValueError("seq_len must be positive")
+        if self.seq_stride <= 0:
+            raise ValueError("seq_stride must be positive")
+        self.target_policy = str(target_policy).lower()
+        if self.target_policy not in {"last", "majority"}:
+            raise ValueError("target_policy must be 'last' or 'majority'")
         self.dataset = dataset.lower()
+        if source_indices is None:
+            self.source_indices = np.arange(len(X), dtype=np.int64)
+        else:
+            self.source_indices = np.asarray(source_indices)
+            if len(self.source_indices) != len(X):
+                raise ValueError("source_indices length must match X")
 
         if self.dataset == "pamap2":
             self._node_fn = window_to_node_features_pamap2
-            self.adj = build_pamap2_adj()
+            self.adj = build_pamap2_adj(int(X.shape[2]))
         else:
             self._node_fn = window_to_node_features_hhar
             self.adj = build_hhar_adj()
@@ -191,19 +208,31 @@ class HARSequenceDataset(Dataset):
             subjects = np.zeros(len(X), dtype=np.int64)
 
         seq_indices, seq_labels = [], []
+        seq_source_start, seq_source_end, seq_source_target = [], [], []
         for subj in np.unique(subjects):
             mask = np.where(subjects == subj)[0]
             subj_y = y[mask]
-            for start in range(0, len(mask) - seq_len + 1, seq_len):
-                win_indices = mask[start: start + seq_len]   # absolute indices into X
-                label_window = subj_y[start: start + seq_len]
-                label = int(np.bincount(label_window).argmax())
+            for start in range(0, len(mask) - self.seq_len + 1, self.seq_stride):
+                win_indices = mask[start: start + self.seq_len]   # absolute indices into X
+                label_window = subj_y[start: start + self.seq_len]
+                if self.target_policy == "last":
+                    target_local_idx = int(win_indices[-1])
+                    label = int(y[target_local_idx])
+                else:
+                    target_local_idx = int(win_indices[-1])
+                    label = int(np.bincount(label_window).argmax())
                 seq_indices.append(win_indices)
                 seq_labels.append(label)
+                seq_source_start.append(self.source_indices[int(win_indices[0])])
+                seq_source_end.append(self.source_indices[int(win_indices[-1])])
+                seq_source_target.append(self.source_indices[target_local_idx])
 
         # seq_indices: list of 1-D arrays of length seq_len
         self._seq_indices = seq_indices                    # list of np arrays
         self.labels = torch.tensor(seq_labels, dtype=torch.long)
+        self.sequence_start_source_indices = np.asarray(seq_source_start)
+        self.sequence_end_source_indices = np.asarray(seq_source_end)
+        self.target_source_indices = np.asarray(seq_source_target)
 
     # -- helpers -------------------------------------------------------
 

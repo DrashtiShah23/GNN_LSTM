@@ -33,10 +33,12 @@ DEFAULT_MODELS = [
     "gnn",
     "gnn_lstm",
     "improved_gnn_lstm",
+    "improved_gnn_lstm_res",
     "gnn_flatten_lstm",
     "gnn_learnable_adj",
     "gnn_attention_adj",
     "improved_gnn_lstm_attn_adj",
+    "improved_gnn_lstm_attn_adj_resbn",
     "cnn",
 ]
 
@@ -56,7 +58,14 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
 def eval_unit_for_model(model_name: str, requested: str) -> str:
     if requested != "auto":
         return requested
-    if model_name in {"gnn_lstm", "improved_gnn_lstm", "improved_gnn_lstm_attn_adj", "gnn_flatten_lstm"}:
+    if model_name in {
+        "gnn_lstm",
+        "improved_gnn_lstm",
+        "improved_gnn_lstm_res",
+        "improved_gnn_lstm_attn_adj",
+        "improved_gnn_lstm_attn_adj_resbn",
+        "gnn_flatten_lstm",
+    }:
         return "sequence"
     return "window"
 

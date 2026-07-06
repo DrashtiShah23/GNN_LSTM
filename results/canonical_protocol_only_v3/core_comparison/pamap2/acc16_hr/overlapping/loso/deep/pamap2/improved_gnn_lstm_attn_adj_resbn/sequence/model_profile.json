@@ -1,0 +1,18 @@
+{
+  "dataset": "pamap2",
+  "model": "improved_gnn_lstm_attn_adj_resbn",
+  "eval_unit": "sequence",
+  "raw_window_shape": [
+    128,
+    10
+  ],
+  "n_nodes": 13,
+  "node_feat_dim": 23,
+  "n_classes": 12,
+  "total_params": 11160502,
+  "trainable_params": 11160502,
+  "non_trainable_params": 0,
+  "buffer_values": 2862,
+  "parameter_size_mb_float32": 42.573936462402344,
+  "profile_method": "computed from instantiated torch module using sum(p.numel())"
+}
