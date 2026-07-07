@@ -1,0 +1,32 @@
+{
+  "results_root": "results",
+  "out_root": "results\\canonical_protocol12_seven_experiments",
+  "feature_sets": [
+    "acc16_gyro",
+    "acc16_gyro_hr",
+    "acc16_hr"
+  ],
+  "include_baselines": true,
+  "include_v3": true,
+  "baseline_models": [
+    "adaboost_tree",
+    "bagged_tree_entropy",
+    "decision_tree_entropy",
+    "dummy_most_frequent",
+    "gaussian_nb",
+    "knn_k5",
+    "linear_svm",
+    "random_forest",
+    "rbf_svm",
+    "xgboost_hist"
+  ],
+  "v3_models": [
+    "improved_gnn_lstm_attn_adj_resbn",
+    "improved_gnn_lstm_res"
+  ],
+  "summary_rows": 66,
+  "fold_rows": 330,
+  "prediction_rows": 1195305,
+  "exp3_status": "real_table_present",
+  "exp6_status": "real_table_present"
+}

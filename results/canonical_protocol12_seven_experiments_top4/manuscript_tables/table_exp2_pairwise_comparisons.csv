@@ -1,0 +1,7 @@
+result_set,feature_set,model_a,model_b,macro_f1_mean_diff_a_minus_b,paired_folds
+canonical_protocol_only,acc16_gyro,knn_k5,random_forest,-0.0924694098655142,9
+canonical_protocol_only,acc16_gyro_hr,knn_k5,random_forest,-0.05875274719957903,9
+canonical_protocol_only,acc16_hr,knn_k5,random_forest,-0.040590352561070325,9
+canonical_protocol_only_v3,acc16_gyro,improved_gnn_lstm_attn_adj_resbn,improved_gnn_lstm_res,0.014292160985089468,9
+canonical_protocol_only_v3,acc16_gyro_hr,improved_gnn_lstm_attn_adj_resbn,improved_gnn_lstm_res,-0.007057976839292681,9
+canonical_protocol_only_v3,acc16_hr,improved_gnn_lstm_attn_adj_resbn,improved_gnn_lstm_res,0.023648163505915584,9

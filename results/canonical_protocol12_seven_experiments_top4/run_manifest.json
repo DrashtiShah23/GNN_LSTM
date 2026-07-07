@@ -1,0 +1,24 @@
+{
+  "results_root": "results",
+  "out_root": "results\\canonical_protocol12_seven_experiments_top4",
+  "feature_sets": [
+    "acc16_gyro",
+    "acc16_gyro_hr",
+    "acc16_hr"
+  ],
+  "include_baselines": true,
+  "include_v3": true,
+  "baseline_models": [
+    "knn_k5",
+    "random_forest"
+  ],
+  "v3_models": [
+    "improved_gnn_lstm_attn_adj_resbn",
+    "improved_gnn_lstm_res"
+  ],
+  "summary_rows": 24,
+  "fold_rows": 120,
+  "prediction_rows": 434286,
+  "exp3_status": "real_table_present",
+  "exp6_status": "real_table_present"
+}
