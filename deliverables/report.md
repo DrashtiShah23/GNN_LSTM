@@ -103,6 +103,17 @@ Important distinction:
 - If we evaluate the **full conducted work**, the original `improved_gnn_lstm_attn_adj` is the best deep LOSO model.
 - If we evaluate the **final top4 DOCX package only**, `random_forest` wins LOSO and v3 deep models are competitive but lower.
 
+Best LOSO row per feature set and family, across conducted core/v3 runs:
+
+| Feature set | Family | Track | Window | Model | Accuracy | Macro-F1 |
+|---|---|---|---|---|---:|---:|
+| `acc16_gyro` | baseline | v1/top4 | overlapping | `random_forest` | 0.8823 | 0.8863 |
+| `acc16_gyro` | deep | v3/top4 | overlapping | `improved_gnn_lstm_attn_adj_resbn` | 0.8779 | 0.8810 |
+| `acc16_gyro_hr` | baseline | v1/top4 | overlapping | `random_forest` | 0.8801 | 0.8815 |
+| `acc16_gyro_hr` | deep | v1/core | overlapping | `improved_gnn_lstm_attn_adj` | 0.8892 | 0.8855 |
+| `acc16_hr` | baseline | top4 | non_overlapping | `random_forest` | 0.8558 | 0.8528 |
+| `acc16_hr` | deep | v1/core | overlapping | `gnn_flatten_lstm` | 0.8549 | 0.8467 |
+
 Blunt conclusion: the GNN family came very close to the best baseline in v1, but the final v3 residual models did not surpass `random_forest` on strict LOSO.
 
 ### 2. Which model wins under random holdout?
@@ -165,13 +176,16 @@ Conclusion: deep models are not a clean zero-shot LOSO winner, but they are scie
 
 ### 5. Which feature set is best?
 
-For original v1 LOSO across all core models:
+For original v1 overlapping LOSO across all core models, each feature set has `11` model evaluations:
 
-| Feature set | Mean Macro-F1 | Best Macro-F1 | Rows |
-|---|---:|---:|---:|
-| `acc16_gyro` | 0.8001 | 0.8863 | 13 |
-| `acc16_gyro_hr` | 0.7989 | 0.8855 | 13 |
-| `acc16_hr` | 0.7711 | 0.8528 | 13 |
+- `2` baselines: `random_forest`, `knn_k5`
+- `9` deep models: `cnn`, `lstm`, `gnn`, `gnn_learnable_adj`, `gnn_attention_adj`, `gnn_lstm`, `gnn_flatten_lstm`, `improved_gnn_lstm`, `improved_gnn_lstm_attn_adj`
+
+| Feature set | Model evaluations | Mean Macro-F1 | Best model | Best Macro-F1 |
+|---|---:|---:|---|---:|
+| `acc16_gyro` | 11 | 0.7909 | `random_forest` | 0.8863 |
+| `acc16_gyro_hr` | 11 | 0.7890 | `improved_gnn_lstm_attn_adj` | 0.8855 |
+| `acc16_hr` | 11 | 0.7593 | `random_forest` | 0.8506 |
 
 For the final top4 set:
 
@@ -185,17 +199,23 @@ Practical conclusion: use `acc16_gyro` or `acc16_gyro_hr` for serious LOSO claim
 
 Subject `109` is the dominant failure case across both the all-model audit and final top4 results.
 
-All-model audit mean subject performance:
+Important caveat: the all-model audit includes weak diagnostic baselines such as `dummy_most_frequent`, so its subject averages are useful for broad failure detection but are harsher than the final top4 model set. The final top4 table is the cleaner subject-failure evidence.
+
+All-model audit mean subject performance, all 9 subjects:
 
 | Subject | Mean Macro-F1 | Mean Accuracy |
 |---:|---:|---:|
-| 109 | 0.1234 | 0.7306 |
-| 103 | 0.5291 | 0.7881 |
-| 104 | 0.6068 | 0.7314 |
+| 109 | 0.2412 | 0.7306 |
+| 103 | 0.5457 | 0.7881 |
+| 104 | 0.6137 | 0.7314 |
 | 108 | 0.6260 | 0.6705 |
 | 102 | 0.6799 | 0.7045 |
+| 106 | 0.6955 | 0.7669 |
+| 101 | 0.7004 | 0.7149 |
+| 107 | 0.7253 | 0.8030 |
+| 105 | 0.7674 | 0.7818 |
 
-Final top4 mean subject performance:
+Final top4 mean subject performance, all 9 subjects:
 
 | Subject | Mean Macro-F1 | Mean Accuracy |
 |---:|---:|---:|
@@ -204,15 +224,63 @@ Final top4 mean subject performance:
 | 108 | 0.7137 | 0.7512 |
 | 104 | 0.7517 | 0.8563 |
 | 102 | 0.8029 | 0.8158 |
+| 106 | 0.8111 | 0.8818 |
+| 101 | 0.8373 | 0.8406 |
+| 107 | 0.8743 | 0.9232 |
+| 105 | 0.8824 | 0.8853 |
 
-The repeated class-level failures are:
+Worst final top4 row per subject:
 
-- `rope_jumping -> running`
-- `standing -> sitting`
-- `sitting -> standing`
-- `vacuum_cleaning -> ironing`
-- `nordic_walking -> walking`
-- stair labels confused with locomotion
+| Subject | Feature set | Window | Family | Model | Accuracy | Macro-F1 | Worst activity | Worst activity recall | Dominant confusion |
+|---:|---|---|---|---|---:|---:|---|---:|---|
+| 101 | `acc16_hr` | overlapping | baseline | `random_forest` | 0.7747 | 0.7568 | `descending_stairs` | 0.4105 | `vacuum_cleaning -> cycling` |
+| 102 | `acc16_hr` | non_overlapping | deep | `improved_gnn_lstm_res` | 0.7047 | 0.7012 | `nordic_walking` | 0.0043 | `walking -> ascending_stairs` |
+| 103 | `acc16_gyro` | overlapping | baseline | `knn_k5` | 0.7999 | 0.5360 | `sitting` | 0.6696 | `sitting -> standing` |
+| 104 | `acc16_hr` | overlapping | baseline | `random_forest` | 0.7597 | 0.6275 | `ironing` | 0.2596 | `ironing -> vacuum_cleaning` |
+| 105 | `acc16_hr` | non_overlapping | baseline | `knn_k5` | 0.8241 | 0.8130 | `descending_stairs` | 0.4490 | `vacuum_cleaning -> ironing` |
+| 106 | `acc16_gyro` | non_overlapping | baseline | `knn_k5` | 0.8332 | 0.7642 | `rope_jumping` | 0.0000 | `standing -> sitting` |
+| 107 | `acc16_hr` | non_overlapping | baseline | `knn_k5` | 0.8549 | 0.7670 | `ascending_stairs` | 0.5620 | `ascending_stairs -> walking` |
+| 108 | `acc16_hr` | overlapping | deep | `improved_gnn_lstm_res` | 0.4431 | 0.3794 | `nordic_walking` | 0.0000 | `nordic_walking -> descending_stairs` |
+| 109 | `acc16_gyro` | non_overlapping | deep | `improved_gnn_lstm_res` | 0.0000 | 0.0000 | `rope_jumping` | 0.0000 | `rope_jumping -> running` |
+
+Most frequent final top4 dominant confusions:
+
+| Dominant confusion | Count |
+|---|---:|
+| `standing -> sitting` | 40 |
+| `sitting -> standing` | 34 |
+| `vacuum_cleaning -> ironing` | 30 |
+| `nordic_walking -> walking` | 14 |
+| `rope_jumping -> running` | 14 |
+| `sitting -> ironing` | 10 |
+| `vacuum_cleaning -> cycling` | 7 |
+| `ironing -> standing` | 7 |
+| `standing -> ironing` | 6 |
+| `ironing -> vacuum_cleaning` | 6 |
+
+Most frequent final top4 worst activities:
+
+| Worst activity | Count |
+|---|---:|
+| `rope_jumping` | 51 |
+| `descending_stairs` | 41 |
+| `sitting` | 30 |
+| `standing` | 21 |
+| `vacuum_cleaning` | 18 |
+| `nordic_walking` | 17 |
+| `running` | 14 |
+| `ironing` | 9 |
+| `ascending_stairs` | 6 |
+| `cycling` | 5 |
+| `walking` | 4 |
+
+Subject-level interpretation:
+
+- `109` is the major outlier. Its dominant failure is `rope_jumping -> running`, and some final top4 rows collapse completely on this subject. This points to subject-specific high-intensity motion style rather than a global class-label issue.
+- `103` has high mean accuracy but much lower macro-F1, which indicates class imbalance or missing/weak per-class recall. The dominant failure is posture confusion, especially `sitting -> standing`.
+- `108` is difficult because `nordic_walking` is repeatedly confused with walking/stairs. The worst top4 row has `nordic_walking` recall of `0.0000`.
+- `104` is driven by household-motion confusion, especially `ironing -> vacuum_cleaning`.
+- `101`, `105`, and `107` are not globally poor, but their worst rows show stair and household confusions that should still be mentioned.
 
 Interpretation: the main problem is subject-specific movement style and biomechanically similar classes, not just model capacity.
 
@@ -220,24 +288,27 @@ Interpretation: the main problem is subject-specific movement style and biomecha
 
 ### V1 Original Canonical Core
 
-Best v1 LOSO rows:
+Best v1 LOSO row per feature set and family:
 
-| Rank | Feature set | Family | Model | Macro-F1 |
-|---:|---|---|---|---:|
-| 1 | `acc16_gyro` | baseline | `random_forest` | 0.8863 |
-| 2 | `acc16_gyro_hr` | deep | `improved_gnn_lstm_attn_adj` | 0.8855 |
-| 3 | `acc16_gyro_hr` | baseline | `random_forest` | 0.8815 |
-| 4 | `acc16_gyro_hr` | deep | `improved_gnn_lstm` | 0.8690 |
-| 5 | `acc16_gyro` | deep | `improved_gnn_lstm` | 0.8553 |
+| Feature set | Family | Model | Accuracy | Balanced accuracy | Macro-F1 |
+|---|---|---|---:|---:|---:|
+| `acc16_gyro` | baseline | `random_forest` | 0.8823 | 0.8742 | 0.8863 |
+| `acc16_gyro` | deep | `improved_gnn_lstm` | 0.8570 | 0.8593 | 0.8553 |
+| `acc16_gyro_hr` | baseline | `random_forest` | 0.8801 | 0.8785 | 0.8815 |
+| `acc16_gyro_hr` | deep | `improved_gnn_lstm_attn_adj` | 0.8892 | 0.8842 | 0.8855 |
+| `acc16_hr` | baseline | `random_forest` | 0.8529 | 0.8491 | 0.8506 |
+| `acc16_hr` | deep | `gnn_flatten_lstm` | 0.8549 | 0.8477 | 0.8467 |
 
-Best v1 holdout rows:
+Best v1 random-holdout row per feature set and family:
 
-| Rank | Feature set | Family | Model | Macro-F1 |
-|---:|---|---|---|---:|
-| 1 | `acc16_gyro` | deep | `gnn_flatten_lstm` | 0.9872 |
-| 2 | `acc16_gyro` | deep | `improved_gnn_lstm_attn_adj` | 0.9855 |
-| 3 | `acc16_gyro` | deep | `improved_gnn_lstm` | 0.9830 |
-| 4 | `acc16_gyro_hr` | deep | `improved_gnn_lstm_attn_adj` | 0.9760 |
+| Feature set | Family | Model | Accuracy | Balanced accuracy | Macro-F1 |
+|---|---|---|---:|---:|---:|
+| `acc16_gyro` | baseline | `random_forest` | 0.9434 | 0.9339 | 0.9422 |
+| `acc16_gyro` | deep | `gnn_flatten_lstm` | 0.9876 | 0.9874 | 0.9872 |
+| `acc16_gyro_hr` | baseline | `random_forest` | 0.9616 | 0.9598 | 0.9616 |
+| `acc16_gyro_hr` | deep | `improved_gnn_lstm_attn_adj` | 0.9776 | 0.9758 | 0.9760 |
+| `acc16_hr` | baseline | `random_forest` | 0.9674 | 0.9652 | 0.9671 |
+| `acc16_hr` | deep | `improved_gnn_lstm` | 0.9759 | 0.9733 | 0.9740 |
 
 V1 conclusion: original improved GNN-LSTM attention adjacency was the closest deep model to the best LOSO baseline. It is important and should not be erased from the narrative.
 
@@ -258,15 +329,22 @@ V2 conclusion:
 
 ### V3 Residual GNN-LSTM Models
 
-Best v3 LOSO rows:
+All v3 LOSO rows are shown below so each feature set is visible, including `acc16_hr`.
 
-| Rank | Feature set | Window | Model | Macro-F1 |
-|---:|---|---|---|---:|
-| 1 | `acc16_gyro` | overlapping | `improved_gnn_lstm_attn_adj_resbn` | 0.8810 |
-| 2 | `acc16_gyro_hr` | overlapping | `improved_gnn_lstm_res` | 0.8757 |
-| 3 | `acc16_gyro_hr` | non_overlapping | `improved_gnn_lstm_attn_adj_resbn` | 0.8685 |
-| 4 | `acc16_gyro_hr` | overlapping | `improved_gnn_lstm_attn_adj_resbn` | 0.8647 |
-| 5 | `acc16_gyro` | non_overlapping | `improved_gnn_lstm_attn_adj_resbn` | 0.8638 |
+| Feature set | Window | Model | Accuracy | Balanced accuracy | Macro-F1 |
+|---|---|---|---:|---:|---:|
+| `acc16_gyro` | overlapping | `improved_gnn_lstm_attn_adj_resbn` | 0.8779 | 0.8766 | 0.8810 |
+| `acc16_gyro` | overlapping | `improved_gnn_lstm_res` | 0.8689 | 0.8623 | 0.8570 |
+| `acc16_gyro` | non_overlapping | `improved_gnn_lstm_attn_adj_resbn` | 0.8773 | 0.8745 | 0.8638 |
+| `acc16_gyro` | non_overlapping | `improved_gnn_lstm_res` | 0.8529 | 0.8456 | 0.8341 |
+| `acc16_gyro_hr` | overlapping | `improved_gnn_lstm_res` | 0.8758 | 0.8788 | 0.8757 |
+| `acc16_gyro_hr` | overlapping | `improved_gnn_lstm_attn_adj_resbn` | 0.8755 | 0.8716 | 0.8647 |
+| `acc16_gyro_hr` | non_overlapping | `improved_gnn_lstm_attn_adj_resbn` | 0.8819 | 0.8735 | 0.8685 |
+| `acc16_gyro_hr` | non_overlapping | `improved_gnn_lstm_res` | 0.8585 | 0.8523 | 0.8428 |
+| `acc16_hr` | overlapping | `improved_gnn_lstm_attn_adj_resbn` | 0.8347 | 0.8412 | 0.8371 |
+| `acc16_hr` | overlapping | `improved_gnn_lstm_res` | 0.8144 | 0.8043 | 0.8044 |
+| `acc16_hr` | non_overlapping | `improved_gnn_lstm_attn_adj_resbn` | 0.8401 | 0.8456 | 0.8294 |
+| `acc16_hr` | non_overlapping | `improved_gnn_lstm_res` | 0.8333 | 0.8364 | 0.8236 |
 
 V3 conclusion:
 
@@ -300,15 +378,18 @@ Claim: random holdout is inflated and must be secondary to LOSO.
 
 All-model fold-level ranking is led by `random_forest`.
 
-Top all-model fold-mean LOSO macro-F1 rows:
+Best all-model fold-mean LOSO row per feature set and family:
 
 | Feature set | Family | Model | Mean Macro-F1 | Std |
 |---|---|---|---:|---:|
 | `acc16_gyro` | baseline | `random_forest` | 0.7682 | 0.2337 |
-| `acc16_gyro_hr` | baseline | `random_forest` | 0.7445 | 0.2131 |
-| `acc16_hr` | baseline | `random_forest` | 0.7194 | 0.2186 |
 | `acc16_gyro` | deep | `improved_gnn_lstm_attn_adj_resbn` | 0.7185 | 0.2535 |
+| `acc16_gyro_hr` | baseline | `random_forest` | 0.7445 | 0.2131 |
 | `acc16_gyro_hr` | deep | `improved_gnn_lstm_res` | 0.7158 | 0.2520 |
+| `acc16_hr` | baseline | `random_forest` | 0.7194 | 0.2186 |
+| `acc16_hr` | deep | `improved_gnn_lstm_attn_adj_resbn` | 0.6825 | 0.2444 |
+
+This is the corrected reliability table. The earlier ranked view hid `acc16_hr` deep because it was below the top five rows, not because the experiment was missing.
 
 The standard deviations are large. Subject variability is a central finding.
 
@@ -470,4 +551,3 @@ It contains:
 - `manifests/`: completion manifests
 - `report.md`: this complete interpretation report
 - `PAMAP2_SEVEN_EXPERIMENTS_REPORT.md`: generated artifact report
-
