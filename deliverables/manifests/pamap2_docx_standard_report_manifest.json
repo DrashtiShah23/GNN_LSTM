@@ -1,0 +1,10 @@
+{
+  "out_root": "results\\canonical_protocol12_seven_experiments_top4",
+  "enhanced_tables": "results\\canonical_protocol12_seven_experiments_top4\\manuscript_tables_enhanced",
+  "figures": "results\\canonical_protocol12_seven_experiments_top4\\manuscript_figures",
+  "report": "results\\canonical_protocol12_seven_experiments_top4\\PAMAP2_SEVEN_EXPERIMENTS_REPORT.md",
+  "summary_rows": 48,
+  "fold_rows": 240,
+  "prediction_rows": 651576,
+  "missing": []
+}

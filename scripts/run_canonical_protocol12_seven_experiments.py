@@ -208,7 +208,7 @@ def load_predictions(summary: pd.DataFrame) -> pd.DataFrame:
         df = read_csv(pred)
         if df.empty:
             continue
-        for key in ["result_set", "feature_set", "protocol", "family", "model", "eval_unit"]:
+        for key in ["result_set", "feature_set", "window_type", "protocol", "family", "model", "eval_unit"]:
             df[key] = row.get(key, "")
         frames.append(df)
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
@@ -230,20 +230,20 @@ def has_real_table(path: Path) -> bool:
 
 
 def exp1(summary: pd.DataFrame) -> pd.DataFrame:
-    cols = ["result_set", "feature_set", "protocol", "family", "model", "accuracy", "balanced_accuracy", "macro_f1"]
+    cols = ["result_set", "feature_set", "window_type", "protocol", "family", "model", "accuracy", "balanced_accuracy", "macro_f1"]
     rows = summary[[c for c in cols if c in summary.columns]].copy()
-    pivot = summary.pivot_table(index=["result_set", "feature_set", "family", "model"], columns="protocol", values="accuracy", aggfunc="first")
+    pivot = summary.pivot_table(index=["result_set", "feature_set", "window_type", "family", "model"], columns="protocol", values="accuracy", aggfunc="first")
     gaps = []
     for idx, vals in pivot.iterrows():
         gap = vals.get("random_holdout", np.nan) - vals.get("loso", np.nan)
         gaps.append((*idx, gap))
-    gap_df = pd.DataFrame(gaps, columns=["result_set", "feature_set", "family", "model", "holdout_minus_loso_accuracy"])
-    return rows.merge(gap_df, on=["result_set", "feature_set", "family", "model"], how="left")
+    gap_df = pd.DataFrame(gaps, columns=["result_set", "feature_set", "window_type", "family", "model", "holdout_minus_loso_accuracy"])
+    return rows.merge(gap_df, on=["result_set", "feature_set", "window_type", "family", "model"], how="left")
 
 
 def exp2(folds: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     loso = folds[folds["protocol"].astype(str).eq("loso")].copy()
-    group = ["result_set", "feature_set", "family", "model"]
+    group = ["result_set", "feature_set", "window_type", "family", "model"]
     summary = loso.groupby(group, dropna=False).agg(
         folds=("fold", "nunique"),
         accuracy_mean=("accuracy", "mean"),
@@ -254,7 +254,7 @@ def exp2(folds: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         balanced_accuracy_std=("balanced_accuracy", "std"),
     ).reset_index()
     pairs = []
-    for (rs, fs), part in loso.groupby(["result_set", "feature_set"]):
+    for (rs, fs, wt), part in loso.groupby(["result_set", "feature_set", "window_type"]):
         models = sorted(part["model"].unique())
         for i, a in enumerate(models):
             for b in models[i + 1:]:
@@ -265,6 +265,7 @@ def exp2(folds: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
                     pairs.append({
                         "result_set": rs,
                         "feature_set": fs,
+                        "window_type": wt,
                         "model_a": a,
                         "model_b": b,
                         "macro_f1_mean_diff_a_minus_b": float(np.mean(aa[:n] - bb[:n])),
@@ -276,7 +277,7 @@ def exp2(folds: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 def exp3_placeholder(summary: pd.DataFrame) -> pd.DataFrame:
     # True sensor-perturbation robustness requires rerunning checkpoints.
     rows = summary[summary["protocol"].astype(str).eq("loso")].copy()
-    return rows[["result_set", "feature_set", "family", "model", "accuracy", "macro_f1", "artifact_dir"]].assign(
+    return rows[["result_set", "feature_set", "window_type", "family", "model", "accuracy", "macro_f1", "artifact_dir"]].assign(
         perturbation="clean_reference",
         note="Clean canonical reference only; sensor perturbation rerun requires checkpoint-based v3/baseline robustness runner.",
     )
@@ -289,12 +290,12 @@ def exp4(preds: pd.DataFrame) -> pd.DataFrame:
     if not proba_cols:
         return pd.DataFrame()
     rows = []
-    for keys, part in preds.groupby(["result_set", "feature_set", "protocol", "family", "model"], dropna=False):
+    for keys, part in preds.groupby(["result_set", "feature_set", "window_type", "protocol", "family", "model"], dropna=False):
         probs = part[proba_cols].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
         valid = np.isfinite(probs).all(axis=1)
         if not valid.any():
             rows.append({
-                "result_set": keys[0], "feature_set": keys[1], "protocol": keys[2], "family": keys[3], "model": keys[4],
+                "result_set": keys[0], "feature_set": keys[1], "window_type": keys[2], "protocol": keys[3], "family": keys[4], "model": keys[5],
                 "ece": math.nan,
                 "mean_confidence": math.nan,
                 "accuracy": math.nan,
@@ -315,7 +316,7 @@ def exp4(preds: pd.DataFrame) -> pd.DataFrame:
             if mask.any():
                 ece += mask.mean() * abs(correct[mask].mean() - conf[mask].mean())
         rows.append({
-            "result_set": keys[0], "feature_set": keys[1], "protocol": keys[2], "family": keys[3], "model": keys[4],
+            "result_set": keys[0], "feature_set": keys[1], "window_type": keys[2], "protocol": keys[3], "family": keys[4], "model": keys[5],
             "ece": float(ece),
             "mean_confidence": float(conf.mean()),
             "accuracy": float(accuracy_score(y_true, y_pred)),
@@ -327,13 +328,13 @@ def exp4(preds: pd.DataFrame) -> pd.DataFrame:
 
 def exp5(folds: pd.DataFrame) -> pd.DataFrame:
     loso = folds[folds["protocol"].astype(str).eq("loso")].copy()
-    cols = ["result_set", "feature_set", "family", "model", "test_subject", "n_test_classes", "accuracy", "balanced_accuracy", "macro_f1", "weighted_f1"]
-    return loso[[c for c in cols if c in loso.columns]].sort_values(["feature_set", "model", "test_subject"])
+    cols = ["result_set", "feature_set", "window_type", "family", "model", "test_subject", "n_test_classes", "accuracy", "balanced_accuracy", "macro_f1", "weighted_f1"]
+    return loso[[c for c in cols if c in loso.columns]].sort_values(["feature_set", "window_type", "model", "test_subject"])
 
 
 def exp6_placeholder(summary: pd.DataFrame) -> pd.DataFrame:
     rows = summary[summary["protocol"].astype(str).eq("loso")].copy()
-    return rows[["result_set", "feature_set", "family", "model", "accuracy", "macro_f1", "artifact_dir"]].assign(
+    return rows[["result_set", "feature_set", "window_type", "family", "model", "accuracy", "macro_f1", "artifact_dir"]].assign(
         calibration_fraction="0_clean_reference",
         note="Few-shot subject calibration requires fold-checkpoint fine-tuning; not derivable from aggregate CSV alone.",
     )
@@ -343,7 +344,7 @@ def exp7(preds: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     if preds.empty:
         return pd.DataFrame(), pd.DataFrame()
     rows, group_rows = [], []
-    for keys, part in preds.groupby(["result_set", "feature_set", "protocol", "family", "model"], dropna=False):
+    for keys, part in preds.groupby(["result_set", "feature_set", "window_type", "protocol", "family", "model"], dropna=False):
         yt_label = part["y_true_label"].astype(str).map(LABEL_GROUPS)
         yp_label = part["y_pred_label"].astype(str).map(LABEL_GROUPS)
         mask = yt_label.notna() & yp_label.notna()
@@ -352,7 +353,7 @@ def exp7(preds: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         yt = yt_label[mask].to_numpy()
         yp = yp_label[mask].to_numpy()
         rows.append({
-            "result_set": keys[0], "feature_set": keys[1], "protocol": keys[2], "family": keys[3], "model": keys[4],
+            "result_set": keys[0], "feature_set": keys[1], "window_type": keys[2], "protocol": keys[3], "family": keys[4], "model": keys[5],
             "fine_accuracy": float(part["correct"].astype(str).isin(["True", "true", "1"]).mean()) if "correct" in part else math.nan,
             "group_accuracy": float(accuracy_score(yt, yp)),
             "group_macro_f1": float(f1_score(yt, yp, average="macro", zero_division=0)),
@@ -360,7 +361,7 @@ def exp7(preds: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         for group in sorted(set(yt)):
             gm = yt == group
             group_rows.append({
-                "result_set": keys[0], "feature_set": keys[1], "protocol": keys[2], "family": keys[3], "model": keys[4],
+                "result_set": keys[0], "feature_set": keys[1], "window_type": keys[2], "protocol": keys[3], "family": keys[4], "model": keys[5],
                 "activity_group": group,
                 "support": int(gm.sum()),
                 "recall": float((yp[gm] == group).mean()) if gm.any() else math.nan,

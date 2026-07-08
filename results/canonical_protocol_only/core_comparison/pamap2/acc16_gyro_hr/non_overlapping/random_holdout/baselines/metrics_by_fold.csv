@@ -1,0 +1,3 @@
+dataset,feature_set,window_type,window_size,stride,protocol,model_family,model,fold,test_subject,seed,n_train,n_test,fit_predict_sec,label_encoding_note,accuracy,balanced_accuracy,macro_f1,weighted_f1,macro_precision,macro_recall
+pamap2,acc16_gyro_hr,non_overlapping,128,128,random_holdout,baselines,random_forest,1,mixed_subjects,42,,3026,,reconstructed_from_existing_predictions,0.9385327164573695,0.9328141463251108,0.9357958684274328,0.9388651555053236,0.9396813655990292,0.9328141463251108
+pamap2,acc16_gyro_hr,non_overlapping,128,128,random_holdout,baselines,knn_k5,1,mixed_subjects,42,,3026,,reconstructed_from_existing_predictions,0.8945803040317251,0.8921538247784523,0.8975597057802843,0.8953322607062026,0.9083448402729456,0.8921538247784523

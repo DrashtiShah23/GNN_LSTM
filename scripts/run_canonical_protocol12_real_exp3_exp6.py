@@ -116,6 +116,24 @@ def write_csv(df: pd.DataFrame, path: Path) -> None:
     df.to_csv(path, index=False)
 
 
+def append_existing_table(df: pd.DataFrame, path: Path, key_cols: Sequence[str]) -> pd.DataFrame:
+    if df.empty or not path.exists() or path.stat().st_size == 0:
+        return df
+    try:
+        old = pd.read_csv(path)
+    except Exception:
+        return df
+    if old.empty:
+        return df
+    combined = pd.concat([old, df], ignore_index=True, sort=False)
+    keys = [c for c in key_cols if c in combined.columns]
+    if keys:
+        combined = combined.drop_duplicates(subset=keys, keep="last")
+    else:
+        combined = combined.drop_duplicates(keep="last")
+    return combined.reset_index(drop=True)
+
+
 def raw_feature_columns(manifest: dict[str, Any], feature_set: str, n_channels: int) -> list[str]:
     cols = manifest.get("feature_columns")
     if isinstance(cols, list) and len(cols) == n_channels:
@@ -130,6 +148,11 @@ def hr_channel_index(feature_columns: Sequence[str]) -> int | None:
         if str(name).lower() == "heart_rate":
             return i
     return None
+
+
+def body_location_channel_indices(feature_columns: Sequence[str], location: str) -> list[int]:
+    prefix = f"{location.lower()}_"
+    return [i for i, name in enumerate(feature_columns) if str(name).lower().startswith(prefix)]
 
 
 def perturb_windows(
@@ -155,6 +178,24 @@ def perturb_windows(
     if perturbation == "random_channel_dropout":
         mask = rng.random(size=Xp.shape) < scale
         Xp[mask] = 0.0
+        return Xp, ""
+
+    if perturbation == "random_window_dropout":
+        mask = rng.random(size=Xp.shape[0]) < scale
+        Xp[mask, :, :] = 0.0
+        return Xp, ""
+
+    if perturbation == "sensor_node_zero":
+        locations = ["hand", "chest", "ankle"]
+        severity_to_count = {"low": 1, "medium": 2, "high": 3}
+        n_locations = severity_to_count.get(severity, 1)
+        channels: list[int] = []
+        for location in locations[:n_locations]:
+            channels.extend(body_location_channel_indices(feature_columns, location))
+        channels = sorted(set(channels))
+        if not channels:
+            return None, "not_applicable_no_body_location_channels"
+        Xp[:, :, channels] = 0.0
         return Xp, ""
 
     if perturbation == "heart_rate_zero":
@@ -943,6 +984,36 @@ def run_baseline_models(args: argparse.Namespace, experiment: str, feature_set: 
     return frames
 
 
+def run_v3_models(args: argparse.Namespace, experiment: str, feature_set: str, model_names: Sequence[str]) -> list[pd.DataFrame]:
+    names = [name for name in model_names if name]
+    if not names:
+        return []
+    parallel_jobs = max(1, int(args.v3_parallel_jobs))
+    runner = run_exp3_v3 if experiment == "exp3" else run_exp6_v3
+    if parallel_jobs == 1 or len(names) == 1:
+        return [runner(args, feature_set, name) for name in names]
+
+    log_progress(
+        f"{experiment.upper()} v3 parallel start feature_set={feature_set} "
+        f"models={len(names)} parallel_jobs={parallel_jobs}"
+    )
+    frames: list[pd.DataFrame] = []
+    with ProcessPoolExecutor(max_workers=parallel_jobs) as executor:
+        future_map = {
+            executor.submit(runner, args, feature_set, name): name
+            for name in names
+        }
+        for future in as_completed(future_map):
+            name = future_map[future]
+            try:
+                frames.append(future.result())
+                log_progress(f"{experiment.upper()} v3 model done feature_set={feature_set} model={name}")
+            except Exception as exc:
+                log_progress(f"{experiment.upper()} v3 model failed feature_set={feature_set} model={name} error={exc}")
+                raise
+    return frames
+
+
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run real canonical protocol12 Exp3/Exp6.")
     parser.add_argument("--processed-root", type=Path, default=Path("data/processed/canonical_protocol_only"))
@@ -958,6 +1029,7 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--fast-baselines", action="store_true")
     parser.add_argument("--baseline-parallel-jobs", type=int, default=3, help="Number of baseline models to evaluate concurrently.")
     parser.add_argument("--baseline-estimator-jobs", type=int, default=4, help="n_jobs cap passed into sklearn/XGBoost estimators inside each baseline worker.")
+    parser.add_argument("--v3-parallel-jobs", type=int, default=1, help="Number of v3 models to evaluate concurrently. Keep at 1 for Exp6 fine-tuning unless VRAM is known safe.")
     parser.add_argument("--device", default="cuda", choices=["auto", "cpu", "cuda", "mps"])
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--seed", type=int, default=42)
@@ -973,6 +1045,7 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--exp6-weight-decay", type=float, default=1e-4)
     parser.add_argument("--exp6-verbose-epochs", action="store_true", help="Print each fine-tuning epoch loss for Exp6 v3.")
     parser.add_argument("--skip-existing", action="store_true")
+    parser.add_argument("--append-existing", action="store_true", help="Append new Exp3/Exp6 rows to existing tables and deduplicate by canonical row keys.")
     return parser.parse_args(argv)
 
 
@@ -1027,10 +1100,24 @@ def main(argv: Iterable[str] | None = None) -> int:
                     log_progress(f"EXP3 baseline feature_set start feature_set={feature_set}")
                     exp3_frames.extend(run_baseline_models(args, "exp3", feature_set, baseline_model_names))
                 if "v3" in families:
-                    for model_name in parse_csv(args.v3_models):
-                        log_progress(f"EXP3 v3 feature/model start feature_set={feature_set} model={model_name}")
-                        exp3_frames.append(run_exp3_v3(args, feature_set, model_name))
+                    exp3_frames.extend(run_v3_models(args, "exp3", feature_set, parse_csv(args.v3_models)))
             exp3 = pd.concat(exp3_frames, ignore_index=True) if exp3_frames else pd.DataFrame()
+            if args.append_existing:
+                exp3 = append_existing_table(
+                    exp3,
+                    target,
+                    [
+                        "dataset",
+                        "feature_set",
+                        "protocol",
+                        "family",
+                        "model",
+                        "fold",
+                        "test_subject",
+                        "perturbation",
+                        "severity",
+                    ],
+                )
             write_csv(exp3, target)
             write_csv(exp3, detailed / "exp3_robustness_detailed.csv")
             log_progress(f"EXP3 table written path={target} rows={len(exp3)}")
@@ -1045,10 +1132,24 @@ def main(argv: Iterable[str] | None = None) -> int:
                     log_progress(f"EXP6 baseline feature_set start feature_set={feature_set}")
                     exp6_frames.extend(run_baseline_models(args, "exp6", feature_set, baseline_model_names))
                 if "v3" in families:
-                    for model_name in parse_csv(args.v3_models):
-                        log_progress(f"EXP6 v3 feature/model start feature_set={feature_set} model={model_name}")
-                        exp6_frames.append(run_exp6_v3(args, feature_set, model_name))
+                    exp6_frames.extend(run_v3_models(args, "exp6", feature_set, parse_csv(args.v3_models)))
             exp6 = pd.concat(exp6_frames, ignore_index=True) if exp6_frames else pd.DataFrame()
+            if args.append_existing:
+                exp6 = append_existing_table(
+                    exp6,
+                    target,
+                    [
+                        "dataset",
+                        "feature_set",
+                        "protocol",
+                        "family",
+                        "model",
+                        "fold",
+                        "test_subject",
+                        "calibration_percentage",
+                        "fine_tuning_strategy",
+                    ],
+                )
             write_csv(exp6, target)
             write_csv(exp6, detailed / "exp6_few_shot_calibration_detailed.csv")
             log_progress(f"EXP6 table written path={target} rows={len(exp6)}")

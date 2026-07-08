@@ -1,0 +1,3 @@
+dataset,feature_set,window_type,window_size,stride,protocol,model_family,model,fold,test_subject,seed,n_samples,total_sec,accuracy,balanced_accuracy,macro_f1,weighted_f1,macro_precision,macro_recall
+pamap2,acc16_hr,non_overlapping,128,128,loso,baselines,random_forest,aggregate,aggregate,42,15130,,0.8558493060145407,0.8498787983689126,0.8528331997350421,0.8558865069305187,0.8582869607856085,0.8498787983689126
+pamap2,acc16_hr,non_overlapping,128,128,loso,baselines,knn_k5,aggregate,aggregate,42,15130,,0.8208195637805684,0.8061736779288579,0.8192363008593118,0.820667916561725,0.8406354743150874,0.8061736779288579

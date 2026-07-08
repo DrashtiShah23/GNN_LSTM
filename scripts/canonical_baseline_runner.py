@@ -132,6 +132,33 @@ def selected_models(include_xgb: bool, use_cuda: bool, fast: bool, models_arg: s
     return {name: models[name] for name in requested}
 
 
+def predict_proba_global(model: object, X_test: np.ndarray, n_classes: int) -> np.ndarray | None:
+    if not hasattr(model, "predict_proba"):
+        return None
+    try:
+        local_proba = model.predict_proba(X_test)
+    except Exception:
+        return None
+    if local_proba is None:
+        return None
+    local_proba = np.asarray(local_proba, dtype=float)
+    if local_proba.ndim != 2 or local_proba.shape[0] != len(X_test):
+        return None
+    proba = np.zeros((local_proba.shape[0], n_classes), dtype=float)
+    classes = getattr(model, "classes_", None)
+    if classes is None:
+        if local_proba.shape[1] == n_classes:
+            return local_proba
+        return None
+    for local_idx, cls in enumerate(np.asarray(classes).astype(int)):
+        if 0 <= int(cls) < n_classes and local_idx < local_proba.shape[1]:
+            proba[:, int(cls)] = local_proba[:, local_idx]
+    row_sum = proba.sum(axis=1, keepdims=True)
+    valid = row_sum[:, 0] > 0
+    proba[valid] = proba[valid] / row_sum[valid]
+    return proba
+
+
 def write_common_manifests(
     out_dir: Path,
     *,
@@ -184,6 +211,7 @@ def run_protocol(
     test_fraction: float,
     max_windows_per_subject: int | None,
     skip_existing: bool,
+    require_probabilities: bool,
     manifest: dict,
 ) -> None:
     ensure_dir(out_dir)
@@ -214,27 +242,54 @@ def run_protocol(
             try:
                 existing_pred = pd.read_csv(pred_file)
                 if {"y_true_id", "y_pred_id"}.issubset(existing_pred.columns):
-                    y_true_arr = existing_pred["y_true_id"].to_numpy(dtype=int)
-                    y_pred_arr = existing_pred["y_pred_id"].to_numpy(dtype=int)
-                    agg = metrics_dict(y_true_arr, y_pred_arr)
-                    summary_rows.append({
-                        "dataset": dataset,
-                        "feature_set": feature_set,
-                        "window_type": window_type,
-                        "window_size": int(manifest.get("window", 0)),
-                        "stride": int(manifest.get("step", 0)),
-                        "protocol": protocol,
-                        "model_family": "baselines",
-                        "model": model_name,
-                        "fold": "aggregate",
-                        "test_subject": "aggregate",
-                        "seed": int(seed),
-                        "n_samples": int(len(y_true_arr)),
-                        "total_sec": None,
-                        **agg,
-                    })
-                    print(f"[SKIP] {model_name}: using existing {pred_file}")
-                    continue
+                    has_proba = any(str(c).startswith("proba_") for c in existing_pred.columns)
+                    if require_probabilities and not has_proba:
+                        print(f"[REFIT] {model_name}: existing predictions lack probability columns: {pred_file}")
+                    else:
+                        y_true_arr = existing_pred["y_true_id"].to_numpy(dtype=int)
+                        y_pred_arr = existing_pred["y_pred_id"].to_numpy(dtype=int)
+                        if {"fold", "test_subject"}.issubset(existing_pred.columns):
+                            for (fold_id, fold_subject), fold_pred in existing_pred.groupby(["fold", "test_subject"], dropna=False):
+                                fold_true = fold_pred["y_true_id"].to_numpy(dtype=int)
+                                fold_y_pred = fold_pred["y_pred_id"].to_numpy(dtype=int)
+                                fold_metric = metrics_dict(fold_true, fold_y_pred)
+                                fold_rows.append({
+                                    "dataset": dataset,
+                                    "feature_set": feature_set,
+                                    "window_type": window_type,
+                                    "window_size": int(manifest.get("window", 0)),
+                                    "stride": int(manifest.get("step", 0)),
+                                    "protocol": protocol,
+                                    "model_family": "baselines",
+                                    "model": model_name,
+                                    "fold": fold_id,
+                                    "test_subject": fold_subject,
+                                    "seed": int(seed),
+                                    "n_train": None,
+                                    "n_test": int(len(fold_pred)),
+                                    "fit_predict_sec": None,
+                                    "label_encoding_note": "reconstructed_from_existing_predictions",
+                                    **fold_metric,
+                                })
+                        agg = metrics_dict(y_true_arr, y_pred_arr)
+                        summary_rows.append({
+                            "dataset": dataset,
+                            "feature_set": feature_set,
+                            "window_type": window_type,
+                            "window_size": int(manifest.get("window", 0)),
+                            "stride": int(manifest.get("step", 0)),
+                            "protocol": protocol,
+                            "model_family": "baselines",
+                            "model": model_name,
+                            "fold": "aggregate",
+                            "test_subject": "aggregate",
+                            "seed": int(seed),
+                            "n_samples": int(len(y_true_arr)),
+                            "total_sec": None,
+                            **agg,
+                        })
+                        print(f"[SKIP] {model_name}: using existing {pred_file}")
+                        continue
             except Exception as exc:
                 print(f"[WARN] Could not reuse existing predictions for {model_name}: {exc}")
 
@@ -260,6 +315,7 @@ def run_protocol(
                     y[train_idx],
                     X_feat[test_idx],
                 )
+                proba = predict_proba_global(model, X_feat[test_idx], len(labels))
             except Exception as exc:
                 print(f"[ERROR] {model_name} fold={fold_number} subject={fold_subject} failed: {exc}")
                 fold_rows.append({
@@ -323,6 +379,10 @@ def run_protocol(
             fold_meta["y_true_label"] = [labels_display[int(i)] for i in y[test_idx]]
             fold_meta["y_pred_label"] = [labels_display[int(i)] for i in pred.astype(int)]
             fold_meta["correct"] = fold_meta["y_true_id"] == fold_meta["y_pred_id"]
+            if proba is not None:
+                for class_idx in range(proba.shape[1]):
+                    fold_meta[f"proba_{class_idx}"] = proba[:, class_idx]
+                fold_meta["confidence"] = proba.max(axis=1)
             pred_rows.append(fold_meta)
 
         if not y_true_all:
@@ -405,6 +465,7 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--test-fraction", type=float, default=0.2)
     parser.add_argument("--max-windows-per-subject", type=int, default=0, help="Smoke/debug cap; 0 means no cap")
     parser.add_argument("--skip-existing", action="store_true", help="Reuse existing per-model prediction files when present.")
+    parser.add_argument("--require-probabilities", action="store_true", help="With --skip-existing, refit models whose existing prediction files lack proba_* columns.")
     parser.add_argument(
         "--allow-capped-canonical",
         action="store_true",
@@ -473,6 +534,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                     test_fraction=args.test_fraction,
                     max_windows_per_subject=args.max_windows_per_subject if args.max_windows_per_subject > 0 else None,
                     skip_existing=args.skip_existing,
+                    require_probabilities=args.require_probabilities,
                     manifest=manifest,
                 )
     return 0
